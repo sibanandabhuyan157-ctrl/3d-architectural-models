@@ -1,0 +1,2230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Modern Two-Story House — Interactive 3D Blueprint Model</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #dbe2e8;
+      user-select: none;
+    }
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+    /* Floating 3D-to-2D projected room badges */
+    #labels-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+      overflow: hidden;
+    }
+    .room-badge {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 9px 4px 5px;
+      border-radius: 9999px;
+      background: rgba(15, 23, 42, 0.84);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: #f8fafc;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      white-space: nowrap;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+      transition: opacity 0.2s ease, transform 0.12s ease;
+    }
+    .room-badge .num-dot {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 4px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #fff;
+      background: #c94854;
+    }
+    .room-badge.first-floor .num-dot {
+      background: #3aa8ad;
+    }
+    .room-badge.exterior .num-dot {
+      background: #64748b;
+    }
+    .room-badge.blueprint-badge {
+      background: rgba(7, 20, 38, 0.9);
+      border-color: rgba(56, 189, 248, 0.55);
+      color: #e0f2fe;
+    }
+    .room-badge.blueprint-badge .num-dot {
+      background: #0284c7;
+    }
+    /* Custom range slider */
+    input[type="range"].arch-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 9999px;
+      background: linear-gradient(90deg, #f59e0b 0%, #38bdf8 35%, #fb923c 72%, #312e81 100%);
+      outline: none;
+    }
+    input[type="range"].arch-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #0f172a;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      cursor: pointer;
+    }
+    input[type="range"].arch-slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid #0f172a;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      cursor: pointer;
+    }
+    /* Subtle scrollbar for HUD panel on small screens */
+    .hud-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    .hud-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .hud-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.18);
+      border-radius: 9999px;
+    }
+  </style>
+
+  <!-- ES Module Import Map for Three.js & OrbitControls -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- 3D Viewport Container -->
+  <div id="canvas-container"></div>
+
+  <!-- 3D-to-2D Projected Room Labels Layer -->
+  <div id="labels-layer"></div>
+
+  <!-- Top-Right Back Navigation -->
+  <a href="../index.html" class="fixed top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-950/80 hover:bg-slate-900 backdrop-blur-md border border-white/10 shadow-xl text-slate-200 hover:text-white text-xs font-medium transition">
+    <span aria-hidden="true">&larr;</span> All Models
+  </a>
+
+  <!-- Top-Left Architectural Header & HUD Panel -->
+  <div class="fixed top-3 left-3 z-20 flex flex-col gap-2 max-w-[calc(100vw-1.5rem)] sm:max-w-[300px]">
+    <!-- Header Bar -->
+    <div class="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl bg-slate-950/80 backdrop-blur-md border border-white/10 shadow-2xl text-slate-100">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-[#c94854] via-[#475569] to-[#4eb8bc] flex items-center justify-center shrink-0 shadow-inner">
+          <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 10.5L12 4l9 6.5M5 9.5V20h14V9.5M9 20v-6h6v6" />
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-xs sm:text-sm font-semibold tracking-tight truncate">Modern Blueprint Residence</h1>
+          <p class="text-[10px] text-slate-400 truncate">2-Story 3D CAD Model • 1 unit = 1m</p>
+        </div>
+      </div>
+      <button id="btn-toggle-hud" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 active:scale-95 transition text-slate-300" title="Toggle Controls Panel" aria-label="Toggle Controls">
+        <svg id="icon-hud-chevron" class="w-4 h-4 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Collapsible Control Panel -->
+    <div id="hud-panel" class="hud-scroll max-h-[calc(100vh-7.5rem)] overflow-y-auto p-3.5 rounded-2xl bg-slate-950/80 backdrop-blur-md border border-white/10 shadow-2xl text-slate-100 flex flex-col gap-3.5 transition-all duration-200">
+      <!-- View Modes -->
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Architectural View</span>
+          <span id="active-mode-tag" class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#c94854]/20 text-[#f28b94] border border-[#c94854]/30">Exterior</span>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button data-mode="exterior" class="mode-btn px-2.5 py-2 rounded-xl text-[11px] font-medium transition text-left bg-[#c94854] text-white shadow-sm">
+            Full Exterior
+          </button>
+          <button data-mode="first" class="mode-btn px-2.5 py-2 rounded-xl text-[11px] font-medium transition text-left bg-white/5 hover:bg-white/12 text-slate-200 border border-white/5">
+            1st Floor Cutaway
+          </button>
+          <button data-mode="ground" class="mode-btn px-2.5 py-2 rounded-xl text-[11px] font-medium transition text-left bg-white/5 hover:bg-white/12 text-slate-200 border border-white/5">
+            Ground Cutaway
+          </button>
+          <button data-mode="exploded" class="mode-btn px-2.5 py-2 rounded-xl text-[11px] font-medium transition text-left bg-white/5 hover:bg-white/12 text-slate-200 border border-white/5">
+            Exploded View
+          </button>
+        </div>
+      </div>
+
+      <!-- Camera Presets -->
+      <div>
+        <span class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Camera Presets</span>
+        <div class="grid grid-cols-2 gap-1.5">
+          <button data-cam="iso" class="cam-btn px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition bg-[#4eb8bc]/20 text-[#8de0e3] border border-[#4eb8bc]/40">
+            Isometric
+          </button>
+          <button data-cam="front" class="cam-btn px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition bg-white/5 hover:bg-white/12 text-slate-200 border border-white/5">
+            Front Elevation
+          </button>
+          <button data-cam="top" class="cam-btn px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition bg-white/5 hover:bg-white/12 text-slate-200 border border-white/5">
+            Top Plan
+          </button>
+          <button data-cam="rear" class="cam-btn px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition bg-white/5 hover:bg-white/12 text-slate-200 border border-white/5">
+            Rear View
+          </button>
+        </div>
+      </div>
+
+      <!-- Display Toggles -->
+      <div class="flex flex-col gap-2 pt-2 border-t border-white/10">
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-slate-200">Room Labels</span>
+          <button id="toggle-labels" class="relative w-10 h-5 rounded-full bg-[#4eb8bc] transition-colors p-0.5" aria-pressed="true">
+            <span class="block w-4 h-4 rounded-full bg-white shadow transform translate-x-5 transition-transform"></span>
+          </button>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-slate-200">Blueprint Wireframe</span>
+          <button id="toggle-blueprint" class="relative w-10 h-5 rounded-full bg-slate-700 transition-colors p-0.5" aria-pressed="false">
+            <span class="block w-4 h-4 rounded-full bg-white shadow transform translate-x-0 transition-transform"></span>
+          </button>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-xs text-slate-200">Architectural Grid</span>
+          <button id="toggle-grid" class="relative w-10 h-5 rounded-full bg-[#4eb8bc] transition-colors p-0.5" aria-pressed="true">
+            <span class="block w-4 h-4 rounded-full bg-white shadow transform translate-x-5 transition-transform"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Time of Day Slider -->
+      <div class="pt-2 border-t border-white/10">
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Lighting / Time</span>
+          <span id="time-label" class="text-[11px] font-medium text-amber-300">Daylight • 13:00</span>
+        </div>
+        <input id="time-slider" type="range" min="6" max="22.5" step="0.1" value="13" class="arch-slider" />
+        <div class="flex justify-between text-[9px] text-slate-400 mt-1">
+          <span>Morning</span>
+          <span>Daylight</span>
+          <span>Golden Hr</span>
+          <span>Night</span>
+        </div>
+      </div>
+
+      <!-- Export OBJ Button -->
+      <div class="pt-2 border-t border-white/10">
+        <button id="btn-export-obj" class="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#c94854] to-[#b03a45] hover:brightness-110 active:scale-[0.98] transition text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-lg">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4" />
+          </svg>
+          Export Visible Model (.OBJ)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Center Controls Legend Footer -->
+  <div class="fixed bottom-3 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1.5 rounded-full bg-slate-950/75 backdrop-blur-md border border-white/10 text-[10px] sm:text-[11px] text-slate-300 flex items-center gap-3 shadow-lg whitespace-nowrap max-w-[95vw] overflow-hidden">
+    <span><strong class="text-white">Left-drag:</strong> Rotate</span>
+    <span class="text-slate-600">•</span>
+    <span><strong class="text-white">Right-drag:</strong> Pan</span>
+    <span class="text-slate-600">•</span>
+    <span><strong class="text-white">Scroll:</strong> Zoom</span>
+  </div>
+
+  <!-- Non-blocking Toast Message Box -->
+  <div id="toast-box" class="fixed top-4 right-4 z-30 px-4 py-2.5 rounded-xl bg-slate-950/90 backdrop-blur-md border border-[#4eb8bc]/40 text-slate-100 text-xs font-medium shadow-2xl transform translate-y-[-20px] opacity-0 pointer-events-none transition-all duration-300 flex items-center gap-2">
+    <span class="w-2 h-2 rounded-full bg-[#4eb8bc]"></span>
+    <span id="toast-text">Exported modern-blueprint-house.obj</span>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // =========================================================================
+    // 1. PROCEDURAL TEXTURES (100% Canvas-Generated, Zero External Dependencies)
+    // =========================================================================
+
+    function createSlateStoneTextures() {
+      const size = 512;
+      const colorCanvas = document.createElement('canvas');
+      colorCanvas.width = size;
+      colorCanvas.height = size;
+      const cCtx = colorCanvas.getContext('2d');
+
+      const bumpCanvas = document.createElement('canvas');
+      bumpCanvas.width = size;
+      bumpCanvas.height = size;
+      const bCtx = bumpCanvas.getContext('2d');
+
+      // Dark mortar base
+      cCtx.fillStyle = '#252930';
+      cCtx.fillRect(0, 0, size, size);
+      bCtx.fillStyle = '#202020';
+      bCtx.fillRect(0, 0, size, size);
+
+      const rows = 14;
+      const rowH = size / rows;
+      const palette = ['#353a42', '#3d424a', '#464c56', '#2f343b', '#4d545f', '#383e47'];
+
+      // Deterministic pseudo-random helper for consistent masonry look
+      let seed = 42;
+      const rand = () => {
+        seed = (seed * 16807) % 2147483647;
+        return (seed - 1) / 2147483646;
+      };
+
+      for (let r = 0; r < rows; r++) {
+        let x = -rand() * 48;
+        const y = r * rowH;
+        const mortar = 2.2;
+        while (x < size) {
+          const w = 52 + rand() * 76;
+          const col = palette[Math.floor(rand() * palette.length)];
+          const shade = Math.floor((rand() - 0.5) * 18);
+
+          // Draw stone block
+          cCtx.fillStyle = col;
+          cCtx.fillRect(x + mortar, y + mortar, w - mortar * 2, rowH - mortar * 2);
+
+          // Subtle horizontal slate striation
+          cCtx.fillStyle = shade > 0 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.08)';
+          cCtx.fillRect(x + mortar, y + mortar, w - mortar * 2, (rowH - mortar * 2) * 0.45);
+
+          // Bump height per block
+          const bVal = Math.floor(155 + rand() * 75);
+          bCtx.fillStyle = `rgb(${bVal},${bVal},${bVal})`;
+          bCtx.fillRect(x + mortar, y + mortar, w - mortar * 2, rowH - mortar * 2);
+
+          x += w;
+        }
+      }
+
+      // Fine mineral speckle noise
+      for (let i = 0; i < 6500; i++) {
+        const nx = rand() * size;
+        const ny = rand() * size;
+        const bright = rand() > 0.5;
+        cCtx.fillStyle = bright ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.06)';
+        cCtx.fillRect(nx, ny, 2, 1.5);
+        bCtx.fillStyle = bright ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+        bCtx.fillRect(nx, ny, 2, 2);
+      }
+
+      const map = new THREE.CanvasTexture(colorCanvas);
+      map.wrapS = THREE.RepeatWrapping;
+      map.wrapT = THREE.RepeatWrapping;
+      map.colorSpace = THREE.SRGBColorSpace;
+      map.anisotropy = 8;
+
+      const bumpMap = new THREE.CanvasTexture(bumpCanvas);
+      bumpMap.wrapS = THREE.RepeatWrapping;
+      bumpMap.wrapT = THREE.RepeatWrapping;
+      bumpMap.anisotropy = 8;
+
+      return { map, bumpMap };
+    }
+
+    function createBitumenRoofTextures() {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#2a2e33';
+      ctx.fillRect(0, 0, size, size);
+
+      let seed = 108;
+      const rand = () => {
+        seed = (seed * 16807) % 2147483647;
+        return (seed - 1) / 2147483646;
+      };
+
+      // Subtle roll seams
+      ctx.strokeStyle = 'rgba(15, 18, 22, 0.45)';
+      ctx.lineWidth = 2;
+      for (let y = 0; y < size; y += 64) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(size, y);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 4000; i++) {
+        const v = 32 + Math.floor(rand() * 26);
+        ctx.fillStyle = `rgba(${v},${v + 2},${v + 5},0.35)`;
+        ctx.fillRect(rand() * size, rand() * size, 2, 2);
+      }
+
+      const map = new THREE.CanvasTexture(canvas);
+      map.wrapS = THREE.RepeatWrapping;
+      map.wrapT = THREE.RepeatWrapping;
+      map.repeat.set(3, 3);
+      map.colorSpace = THREE.SRGBColorSpace;
+      return map;
+    }
+
+    function createConcreteTexture(baseHex) {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = baseHex;
+      ctx.fillRect(0, 0, size, size);
+
+      let seed = 77;
+      const rand = () => {
+        seed = (seed * 16807) % 2147483647;
+        return (seed - 1) / 2147483646;
+      };
+
+      for (let i = 0; i < 2400; i++) {
+        ctx.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.045)';
+        ctx.fillRect(rand() * size, rand() * size, 3, 2);
+      }
+      // Subtle formwork seam
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(1, 1, size - 2, size / 2);
+
+      const map = new THREE.CanvasTexture(canvas);
+      map.wrapS = THREE.RepeatWrapping;
+      map.wrapT = THREE.RepeatWrapping;
+      map.colorSpace = THREE.SRGBColorSpace;
+      return map;
+    }
+
+    function createWoodFloorTexture() {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#c4a47e';
+      ctx.fillRect(0, 0, size, size);
+
+      const planks = 8;
+      const ph = size / planks;
+      const tones = ['#c8a982', '#bda078', '#ceb28c', '#b79770'];
+      for (let i = 0; i < planks; i++) {
+        ctx.fillStyle = tones[i % tones.length];
+        ctx.fillRect(0, i * ph, size, ph - 1.5);
+        ctx.fillStyle = 'rgba(70,45,20,0.2)';
+        ctx.fillRect(0, (i + 1) * ph - 1.5, size, 1.5);
+      }
+
+      const map = new THREE.CanvasTexture(canvas);
+      map.wrapS = THREE.RepeatWrapping;
+      map.wrapT = THREE.RepeatWrapping;
+      map.repeat.set(3, 3);
+      map.colorSpace = THREE.SRGBColorSpace;
+      return map;
+    }
+
+    function createTileFloorTexture() {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#dde1e5';
+      ctx.fillRect(0, 0, size, size);
+      ctx.strokeStyle = '#c2c8cf';
+      ctx.lineWidth = 2;
+      const step = 64;
+      for (let i = 0; i <= size; i += step) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, size); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(size, i); ctx.stroke();
+      }
+      const map = new THREE.CanvasTexture(canvas);
+      map.wrapS = THREE.RepeatWrapping;
+      map.wrapT = THREE.RepeatWrapping;
+      map.repeat.set(4, 4);
+      map.colorSpace = THREE.SRGBColorSpace;
+      return map;
+    }
+
+    // Scale BoxGeometry UVs proportionally to real-world meters so slate stone never stretches
+    function createWorldBoxGeometry(w, h, d, tileMeters = 3.2) {
+      const geo = new THREE.BoxGeometry(w, h, d);
+      const uv = geo.attributes.uv;
+      const norm = geo.attributes.normal;
+      const pos = geo.attributes.position;
+      for (let i = 0; i < uv.count; i++) {
+        const nx = Math.abs(norm.getX(i));
+        const ny = Math.abs(norm.getY(i));
+        const px = pos.getX(i) + w * 0.5;
+        const py = pos.getY(i) + h * 0.5;
+        const pz = pos.getZ(i) + d * 0.5;
+        if (nx > 0.5) {
+          uv.setXY(i, pz / tileMeters, py / tileMeters);
+        } else if (ny > 0.5) {
+          uv.setXY(i, px / tileMeters, pz / tileMeters);
+        } else {
+          uv.setXY(i, px / tileMeters, py / tileMeters);
+        }
+      }
+      uv.needsUpdate = true;
+      return geo;
+    }
+
+    // =========================================================================
+    // 2. SCENE, RENDERER, CAMERA & LIGHTING SETUP
+    // =========================================================================
+
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#dce4ec');
+    scene.fog = new THREE.Fog('#dce4ec', 55, 130);
+
+    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.2, 260);
+    camera.position.set(-20.5, 16.5, 22.0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.06;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.065;
+    controls.maxPolarAngle = Math.PI / 2 - 0.025;
+    controls.minDistance = 7;
+    controls.maxDistance = 68;
+    controls.target.set(-0.5, 2.8, 0.2);
+    controls.update();
+
+    // Lighting rig
+    const hemiLight = new THREE.HemisphereLight('#eef5fc', '#9aa4ad', 0.85);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight('#fff8ed', 1.9);
+    sunLight.position.set(22, 28, 18);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 2;
+    sunLight.shadow.camera.far = 85;
+    const dShadow = 22;
+    sunLight.shadow.camera.left = -dShadow;
+    sunLight.shadow.camera.right = dShadow;
+    sunLight.shadow.camera.top = dShadow;
+    sunLight.shadow.camera.bottom = -dShadow;
+    sunLight.shadow.bias = -0.0005;
+    sunLight.shadow.normalBias = 0.02;
+    scene.add(sunLight);
+
+    const fillLight = new THREE.DirectionalLight('#b8d4f0', 0.4);
+    fillLight.position.set(-20, 12, -16);
+    scene.add(fillLight);
+
+    // Architectural Presentation Plinth & Grid
+    const plinthMat = new THREE.MeshStandardMaterial({
+      color: '#e5e9ed',
+      roughness: 0.92,
+      metalness: 0.02
+    });
+    const plinthGeo = new THREE.CylinderGeometry(42, 43, 0.4, 64);
+    const plinth = new THREE.Mesh(plinthGeo, plinthMat);
+    plinth.position.set(0, -0.22, 0);
+    plinth.receiveShadow = true;
+    plinth.name = 'PresentationPlinth';
+    scene.add(plinth);
+
+    // Subtle concrete apron walkway outside entrance & garage
+    const apronMat = new THREE.MeshStandardMaterial({ color: '#d0d5db', roughness: 0.88 });
+    const apron = new THREE.Mesh(new THREE.BoxGeometry(27, 0.04, 24), apronMat);
+    apron.position.set(-0.8, -0.01, 0.5);
+    apron.receiveShadow = true;
+    scene.add(apron);
+
+    const gridHelper = new THREE.GridHelper(64, 64, '#9aa5b1', '#c7cfd8');
+    gridHelper.position.y = 0.015;
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.55;
+    scene.add(gridHelper);
+
+    // =========================================================================
+    // 3. ARCHITECTURAL MATERIALS PALETTE
+    // =========================================================================
+
+    const slateTex = createSlateStoneTextures();
+    const bitumenMap = createBitumenRoofTextures();
+    const redConcreteMap = createConcreteTexture('#c94854');
+    const tealConcreteMap = createConcreteTexture('#4eb8bc');
+    const woodFloorMap = createWoodFloorTexture();
+    const tileFloorMap = createTileFloorTexture();
+
+    const mats = {
+      stone: new THREE.MeshStandardMaterial({
+        name: 'DarkSlateMasonry',
+        map: slateTex.map,
+        bumpMap: slateTex.bumpMap,
+        bumpScale: 0.045,
+        roughness: 0.85,
+        metalness: 0.06
+      }),
+      roof: new THREE.MeshStandardMaterial({
+        name: 'BitumenRoof',
+        map: bitumenMap,
+        roughness: 0.9,
+        metalness: 0.05
+      }),
+      parapetCap: new THREE.MeshStandardMaterial({
+        name: 'CharcoalParapetTrim',
+        color: '#202429',
+        roughness: 0.5,
+        metalness: 0.35
+      }),
+      redConcrete: new THREE.MeshStandardMaterial({
+        name: 'CoralRedConcrete',
+        map: redConcreteMap,
+        color: '#ffffff',
+        roughness: 0.62,
+        metalness: 0.04
+      }),
+      tealConcrete: new THREE.MeshStandardMaterial({
+        name: 'TurquoiseConcrete',
+        map: tealConcreteMap,
+        color: '#ffffff',
+        roughness: 0.55,
+        metalness: 0.05
+      }),
+      glass: new THREE.MeshPhysicalMaterial({
+        name: 'CurtainWallGlass',
+        color: '#a7c6d4',
+        transparent: true,
+        opacity: 0.46,
+        roughness: 0.08,
+        metalness: 0.15,
+        reflectivity: 0.9,
+        side: THREE.DoubleSide
+      }),
+      spandrelGlass: new THREE.MeshStandardMaterial({
+        name: 'FrostedSpandrelGlass',
+        color: '#889ca6',
+        roughness: 0.3,
+        metalness: 0.2,
+        side: THREE.DoubleSide
+      }),
+      tealGlass: new THREE.MeshPhysicalMaterial({
+        name: 'TealEntranceGlass',
+        color: '#56c7cc',
+        transparent: true,
+        opacity: 0.65,
+        roughness: 0.1,
+        metalness: 0.12,
+        side: THREE.DoubleSide
+      }),
+      mullion: new THREE.MeshStandardMaterial({
+        name: 'CharcoalSteelMullion',
+        color: '#1e2228',
+        roughness: 0.38,
+        metalness: 0.65
+      }),
+      interiorWall: new THREE.MeshStandardMaterial({
+        name: 'InteriorPlasterWall',
+        color: '#eceae4',
+        roughness: 0.88,
+        metalness: 0.0
+      }),
+      woodFloor: new THREE.MeshStandardMaterial({
+        name: 'OakWoodFloor',
+        map: woodFloorMap,
+        roughness: 0.65,
+        metalness: 0.05
+      }),
+      tileFloor: new THREE.MeshStandardMaterial({
+        name: 'ModernTileFloor',
+        map: tileFloorMap,
+        roughness: 0.5,
+        metalness: 0.08
+      }),
+      garageFloor: new THREE.MeshStandardMaterial({
+        name: 'GarageConcreteFloor',
+        color: '#9da3ab',
+        roughness: 0.85,
+        metalness: 0.05
+      }),
+      furnitureWood: new THREE.MeshStandardMaterial({
+        name: 'FurnitureWalnut',
+        color: '#7c5c43',
+        roughness: 0.6
+      }),
+      furnitureFabric: new THREE.MeshStandardMaterial({
+        name: 'FurnitureFabric',
+        color: '#d4cec4',
+        roughness: 0.92
+      }),
+      furnitureAccent: new THREE.MeshStandardMaterial({
+        name: 'FurnitureSlateAccent',
+        color: '#4b5563',
+        roughness: 0.78
+      }),
+      whiteCeramic: new THREE.MeshStandardMaterial({
+        name: 'WhiteCeramic',
+        color: '#f7f8fa',
+        roughness: 0.25,
+        metalness: 0.05
+      }),
+      carBody1: new THREE.MeshStandardMaterial({
+        name: 'StylizedCarSilver',
+        color: '#cbd5e1',
+        roughness: 0.28,
+        metalness: 0.55
+      }),
+      carBody2: new THREE.MeshStandardMaterial({
+        name: 'StylizedCarCharcoal',
+        color: '#334155',
+        roughness: 0.28,
+        metalness: 0.55
+      }),
+      garageDoor: new THREE.MeshStandardMaterial({
+        name: 'GarageDoorPanel',
+        color: '#c8cfd6',
+        roughness: 0.55,
+        metalness: 0.2
+      }),
+      // Blueprint mode materials
+      blueprintSolid: new THREE.MeshBasicMaterial({
+        name: 'BlueprintSolid',
+        color: '#0b2244',
+        transparent: true,
+        opacity: 0.84,
+        polygonOffset: true,
+        polygonOffsetFactor: 1,
+        polygonOffsetUnits: 1
+      }),
+      blueprintGlass: new THREE.MeshBasicMaterial({
+        name: 'BlueprintGlass',
+        color: '#0e3c6b',
+        transparent: true,
+        opacity: 0.35,
+        side: THREE.DoubleSide
+      }),
+      blueprintEdge: new THREE.LineBasicMaterial({
+        color: '#38bdf8',
+        transparent: true,
+        opacity: 0.82
+      })
+    };
+
+    // =========================================================================
+    // 4. HOUSE GROUPS & GEOMETRY HELPER BUILDERS
+    // =========================================================================
+
+    const houseRoot = new THREE.Group();
+    houseRoot.name = 'ModernBlueprintHouse';
+    scene.add(houseRoot);
+
+    const groundFloorGroup = new THREE.Group();
+    groundFloorGroup.name = 'GroundFloor_Y0_3.2';
+    houseRoot.add(groundFloorGroup);
+
+    const firstFloorGroup = new THREE.Group();
+    firstFloorGroup.name = 'FirstFloor_Y3.2_6.4';
+    firstFloorGroup.position.y = 3.2;
+    houseRoot.add(firstFloorGroup);
+
+    const roofGroup = new THREE.Group();
+    roofGroup.name = 'RoofAndSkylights_Y6.4';
+    roofGroup.position.y = 6.4;
+    houseRoot.add(roofGroup);
+
+    const allHouseMeshes = [];
+    const blueprintLines = [];
+    const interiorLights = [];
+
+    function registerMesh(mesh, parent, cast = true, receive = true, addBlueprintOutline = true) {
+      mesh.castShadow = cast;
+      mesh.receiveShadow = receive;
+      mesh.userData.originalMaterial = mesh.material;
+      parent.add(mesh);
+      allHouseMeshes.push(mesh);
+
+      if (addBlueprintOutline && mesh.geometry) {
+        const edges = new THREE.EdgesGeometry(mesh.geometry, 28);
+        const line = new THREE.LineSegments(edges, mats.blueprintEdge);
+        line.visible = false;
+        line.userData.isBlueprintHelper = true;
+        mesh.add(line);
+        blueprintLines.push(line);
+      }
+      return mesh;
+    }
+
+    function addBox(parent, x, y, z, w, h, d, material, name = 'Box', useWorldUV = false, cast = true) {
+      const geo = useWorldUV ? createWorldBoxGeometry(w, h, d, 3.0) : new THREE.BoxGeometry(w, h, d);
+      const mesh = new THREE.Mesh(geo, material);
+      mesh.position.set(x, y, z);
+      mesh.name = name;
+      return registerMesh(mesh, parent, cast, true, true);
+    }
+
+    /**
+     * Builds an exterior or interior wall between (x1,z1) and (x2,z2) with genuine recessed window/door cutouts.
+     * openings: Array of { offset (from start), width, sillY, openH, type: 'window'|'door'|'tealDoor'|'garageDoor'|'open' }
+     */
+    function addWall(parent, x1, z1, x2, z2, yBase, height, thickness, material, openings = [], name = 'Wall') {
+      const dx = x2 - x1;
+      const dz = z2 - z1;
+      const len = Math.hypot(dx, dz);
+      if (len < 0.01) return;
+      const angle = Math.atan2(dz, dx);
+
+      const wallContainer = new THREE.Group();
+      wallContainer.name = name;
+      wallContainer.position.set(x1, yBase, z1);
+      wallContainer.rotation.y = -angle;
+      parent.add(wallContainer);
+
+      const sorted = [...openings].sort((a, b) => a.offset - b.offset);
+      let cursor = 0;
+
+      const isStone = material === mats.stone;
+
+      const placeSegment = (start, segLen, segY, segH) => {
+        if (segLen <= 0.01 || segH <= 0.01) return;
+        addBox(
+          wallContainer,
+          start + segLen / 2,
+          segY + segH / 2,
+          0,
+          segLen,
+          segH,
+          thickness,
+          material,
+          `${name}_Seg`,
+          isStone
+        );
+      };
+
+      for (const op of sorted) {
+        const oStart = Math.max(0, op.offset);
+        const oEnd = Math.min(len, op.offset + op.width);
+        if (oStart > cursor + 0.01) {
+          placeSegment(cursor, oStart - cursor, 0, height);
+        }
+        const opW = oEnd - oStart;
+        const sillH = Math.max(0, op.sillY || 0);
+        const topY = Math.min(height, sillH + (op.openH || height));
+
+        // Sill below opening
+        if (sillH > 0.02) {
+          placeSegment(oStart, opW, 0, sillH);
+        }
+        // Lintel above opening
+        if (height - topY > 0.02) {
+          placeSegment(oStart, opW, topY, height - topY);
+        }
+
+        // Insert recessed frame & glazing/door inside opening
+        const cx = oStart + opW / 2;
+        const cy = sillH + (topY - sillH) / 2;
+        const oh = topY - sillH;
+        const fThick = 0.07;
+
+        if (op.type !== 'open') {
+          // Outer dark charcoal frame
+          addBox(wallContainer, oStart + fThick / 2, cy, 0, fThick, oh, thickness * 0.72, mats.mullion, `${name}_FrameL`, false, false);
+          addBox(wallContainer, oEnd - fThick / 2, cy, 0, fThick, oh, thickness * 0.72, mats.mullion, `${name}_FrameR`, false, false);
+          addBox(wallContainer, cx, topY - fThick / 2, 0, opW, fThick, thickness * 0.72, mats.mullion, `${name}_FrameT`, false, false);
+          addBox(wallContainer, cx, sillH + fThick / 2, 0, opW, fThick, thickness * 0.72, mats.mullion, `${name}_FrameB`, false, false);
+
+          if (op.type === 'window' || op.type === 'tealDoor') {
+            const gMat = op.type === 'tealDoor' ? mats.tealGlass : mats.glass;
+            addBox(wallContainer, cx, cy, 0, Math.max(0.05, opW - fThick * 2), Math.max(0.05, oh - fThick * 2), 0.04, gMat, `${name}_Glass`, false, false);
+            // Mullions for wide windows or doors
+            const cols = op.mullions || (opW > 2.2 ? Math.round(opW / 1.1) : (opW > 1.15 ? 2 : 1));
+            for (let c = 1; c < cols; c++) {
+              const mx = oStart + (opW * c) / cols;
+              addBox(wallContainer, mx, cy, 0, 0.05, oh, thickness * 0.5, mats.mullion, `${name}_MulV`, false, false);
+            }
+            if (op.type === 'tealDoor' || oh > 1.9) {
+              addBox(wallContainer, cx, sillH + oh * 0.72, 0, opW - fThick, 0.05, thickness * 0.5, mats.mullion, `${name}_MulH`, false, false);
+            }
+          } else if (op.type === 'garageDoor') {
+            addBox(wallContainer, cx, cy, -thickness * 0.12, opW - fThick * 1.5, oh - fThick, 0.06, mats.garageDoor, `${name}_GarageDoor`, false, true);
+            // Horizontal slat grooves
+            for (let s = 1; s < 4; s++) {
+              addBox(wallContainer, cx, sillH + (oh * s) / 4, -thickness * 0.06, opW - fThick * 2, 0.03, 0.02, mats.mullion, `${name}_Slat`, false, false);
+            }
+          } else if (op.type === 'door') {
+            addBox(wallContainer, cx, cy, 0, opW - fThick * 1.5, oh - fThick, 0.06, mats.garageDoor, `${name}_SideDoor`, false, true);
+            addBox(wallContainer, oStart + opW * 0.45, cy, 0.04, 0.04, oh - 0.2, 0.03, mats.mullion, `${name}_DoorTrim`, false, false);
+          }
+        }
+        cursor = oEnd;
+      }
+
+      if (cursor < len - 0.01) {
+        placeSegment(cursor, len - cursor, 0, height);
+      }
+    }
+
+    /**
+     * Builds a curved glass curtain wall drum (used for the First Floor Rotunda and East Dining/Bedroom Turret)
+     */
+    function addCurvedCurtainWall(parent, cx, cz, radius, yBase, height, thetaStart, thetaLength, segments, mullionCount, hasSpandrel = true, name = 'CurvedGlass') {
+      const grp = new THREE.Group();
+      grp.name = name;
+      grp.position.set(cx, yBase, cz);
+      parent.add(grp);
+
+      const spandrelH = hasSpandrel ? 0.55 : 0.12;
+      const topBandH = 0.22;
+      const glassH = height - spandrelH - topBandH;
+
+      // Bottom frosted spandrel / curb ring
+      const spanGeo = new THREE.CylinderGeometry(radius, radius, spandrelH, segments, 1, true, thetaStart, thetaLength);
+      const spanMesh = new THREE.Mesh(spanGeo, mats.spandrelGlass);
+      spanMesh.position.y = spandrelH / 2;
+      spanMesh.name = `${name}_Spandrel`;
+      registerMesh(spanMesh, grp, true, true, true);
+
+      // Main transparent curved glass band
+      const glassGeo = new THREE.CylinderGeometry(radius, radius, glassH, segments, 1, true, thetaStart, thetaLength);
+      const glassMesh = new THREE.Mesh(glassGeo, mats.glass);
+      glassMesh.position.y = spandrelH + glassH / 2;
+      glassMesh.name = `${name}_Glass`;
+      registerMesh(glassMesh, grp, false, false, false);
+
+      // Upper transom dark header band
+      const topGeo = new THREE.CylinderGeometry(radius + 0.02, radius + 0.02, topBandH, segments, 1, true, thetaStart, thetaLength);
+      const topMesh = new THREE.Mesh(topGeo, mats.parapetCap);
+      topMesh.position.y = height - topBandH / 2;
+      topMesh.name = `${name}_Header`;
+      registerMesh(topMesh, grp, true, true, true);
+
+      // Horizontal steel transom rings
+      const transomHeights = hasSpandrel ? [0.04, spandrelH, spandrelH + glassH * 0.72, height - topBandH] : [0.04, height * 0.78, height - topBandH];
+      for (const ty of transomHeights) {
+        const ringGeo = new THREE.CylinderGeometry(radius + 0.035, radius + 0.035, 0.06, segments, 1, true, thetaStart, thetaLength);
+        const ringMesh = new THREE.Mesh(ringGeo, mats.mullion);
+        ringMesh.position.y = ty;
+        ringMesh.name = `${name}_Transom`;
+        registerMesh(ringMesh, grp, false, false, false);
+      }
+
+      // Vertical dark steel mullions along arc
+      for (let i = 0; i <= mullionCount; i++) {
+        const angle = thetaStart + (thetaLength * i) / mullionCount;
+        // Three.js CylinderGeometry maps angle 0 to +Z, increasing toward +X: x = R*sin(a), z = R*cos(a)
+        const mx = Math.sin(angle) * (radius + 0.015);
+        const mz = Math.cos(angle) * (radius + 0.015);
+        const mul = new THREE.Mesh(new THREE.BoxGeometry(0.065, height, 0.11), mats.mullion);
+        mul.position.set(mx, height / 2, mz);
+        mul.rotation.y = angle;
+        mul.name = `${name}_Mullion_${i}`;
+        registerMesh(mul, grp, true, false, false);
+      }
+    }
+
+    /**
+     * Adds a flat bitumen roof slab with raised perimeter parapet curb
+     */
+    function addFlatRoof(parent, x, y, z, w, d, parapetH = 0.28, name = 'FlatRoof') {
+      const grp = new THREE.Group();
+      grp.name = name;
+      grp.position.set(x, y, z);
+      parent.add(grp);
+
+      // Main roof deck
+      addBox(grp, 0, 0.1, 0, w, 0.2, d, mats.roof, `${name}_Deck`, false, true);
+
+      // Parapet perimeter walls + dark trim cap
+      const pt = 0.22;
+      addBox(grp, 0, 0.2 + parapetH / 2, d / 2 - pt / 2, w, parapetH, pt, mats.stone, `${name}_ParS`, true, true);
+      addBox(grp, 0, 0.2 + parapetH / 2, -d / 2 + pt / 2, w, parapetH, pt, mats.stone, `${name}_ParN`, true, true);
+      addBox(grp, -w / 2 + pt / 2, 0.2 + parapetH / 2, 0, pt, parapetH, d - pt * 2, mats.stone, `${name}_ParW`, true, true);
+      addBox(grp, w / 2 - pt / 2, 0.2 + parapetH / 2, 0, pt, parapetH, d - pt * 2, mats.stone, `${name}_ParE`, true, true);
+
+      // Crisp metal coping trim
+      const capY = 0.2 + parapetH + 0.03;
+      addBox(grp, 0, capY, d / 2 - pt / 2, w + 0.06, 0.06, pt + 0.06, mats.parapetCap, `${name}_CapS`, false, false);
+      addBox(grp, 0, capY, -d / 2 + pt / 2, w + 0.06, 0.06, pt + 0.06, mats.parapetCap, `${name}_CapN`, false, false);
+      addBox(grp, -w / 2 + pt / 2, capY, 0, pt + 0.06, 0.06, d - pt * 2 + 0.06, mats.parapetCap, `${name}_CapW`, false, false);
+      addBox(grp, w / 2 - pt / 2, capY, 0, pt + 0.06, 0.06, d - pt * 2 + 0.06, mats.parapetCap, `${name}_CapE`, false, false);
+    }
+
+    // Minimalist Furniture Helpers
+    function addBed(parent, x, y, z, w, l, rotY = 0) {
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      g.rotation.y = rotY;
+      parent.add(g);
+      addBox(g, 0, 0.22, 0, w, 0.26, l, mats.furnitureWood, 'BedFrame', false, true);
+      addBox(g, 0, 0.42, 0.04, w - 0.1, 0.2, l - 0.12, mats.furnitureFabric, 'Mattress', false, true);
+      addBox(g, 0, 0.56, -l / 2 + 0.1, w, 0.7, 0.1, mats.furnitureWood, 'Headboard', false, true);
+      addBox(g, -w * 0.24, 0.56, -l / 2 + 0.38, w * 0.38, 0.12, 0.34, mats.whiteCeramic, 'PillowL', false, false);
+      if (w > 1.3) {
+        addBox(g, w * 0.24, 0.56, -l / 2 + 0.38, w * 0.38, 0.12, 0.34, mats.whiteCeramic, 'PillowR', false, false);
+      }
+    }
+
+    function addStylizedCar(parent, x, y, z, bodyMat) {
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      parent.add(g);
+      // Lower chassis
+      addBox(g, 0, 0.46, 0, 1.82, 0.52, 4.15, bodyMat, 'CarChassis', false, true);
+      // Cabin greenhouse
+      addBox(g, 0, 0.92, -0.15, 1.56, 0.48, 2.05, mats.mullion, 'CarCabin', false, true);
+      // Roof cap
+      addBox(g, 0, 1.18, -0.15, 1.5, 0.06, 1.9, bodyMat, 'CarRoof', false, true);
+      // Wheels
+      const wheelGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 16);
+      wheelGeo.rotateZ(Math.PI / 2);
+      for (const [wx, wz] of [[-0.88, 1.25], [0.88, 1.25], [-0.88, -1.25], [0.88, -1.25]]) {
+        const wheel = new THREE.Mesh(wheelGeo, mats.mullion);
+        wheel.position.set(wx, 0.32, wz);
+        registerMesh(wheel, g, true, true, false);
+      }
+    }
+
+    function addScaleHuman(parent, x, y, z, coatHex, height = 1.72) {
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      parent.add(g);
+      const coatMat = new THREE.MeshStandardMaterial({ color: coatHex, roughness: 0.75 });
+      const pantMat = new THREE.MeshStandardMaterial({ color: '#242930', roughness: 0.85 });
+      const skinMat = new THREE.MeshStandardMaterial({ color: '#e2b89a', roughness: 0.65 });
+      // Legs
+      addBox(g, -0.09, height * 0.24, 0, 0.11, height * 0.48, 0.12, pantMat, 'HumanLegL', false, true);
+      addBox(g, 0.09, height * 0.24, 0, 0.11, height * 0.48, 0.12, pantMat, 'HumanLegR', false, true);
+      // Torso coat
+      addBox(g, 0, height * 0.63, 0, 0.36, height * 0.35, 0.19, coatMat, 'HumanTorso', false, true);
+      // Head
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.105, 14, 14), skinMat);
+      head.position.set(0, height * 0.89, 0);
+      registerMesh(head, g, true, true, false);
+    }
+
+    // =========================================================================
+    // 5. BUILD GROUND FLOOR (Y = 0 to 3.2m) — Rooms 1–13 from Blueprint
+    // =========================================================================
+
+    function buildGroundFloor() {
+      const GF = groundFloorGroup;
+      const H = 3.2;
+      const extT = 0.32;
+      const intT = 0.15;
+      const flY = 0.16;
+
+      // --- FLOOR SLABS (Differentiated by room zone for crystal-clear cutaway view) ---
+      // Main core concrete base slab
+      addBox(GF, 0.0, 0.08, 0.1, 13.0, 0.16, 14.2, mats.tileFloor, 'GF_CoreSlab');
+      // 13. Garage slab (West wing: X=-12.5 to -6.0, Z=-2.5 to 3.5)
+      addBox(GF, -9.25, 0.08, 0.5, 6.5, 0.16, 6.0, mats.garageFloor, 'GF_GarageSlab');
+      // 10. Office slab (SW projecting: X=-5.5 to -1.0, Z=7.0 to 10.4)
+      addBox(GF, -3.25, 0.08, 8.7, 4.5, 0.16, 3.4, mats.woodFloor, 'GF_OfficeSlab');
+      // 3. Wardrobe Room slab (Far North projecting: X=-1.8 to 1.8, Z=-10.5 to -6.5)
+      addBox(GF, 0.0, 0.08, -8.5, 3.6, 0.16, 4.0, mats.woodFloor, 'GF_WardrobeSlab');
+      // 11. Guestroom slab (East wing: X=5.8 to 10.4, Z=1.2 to 5.6)
+      addBox(GF, 8.1, 0.08, 3.4, 4.6, 0.16, 4.4, mats.woodFloor, 'GF_GuestSlab');
+      // 8. Dining Room circular bay slab (centered X=6.2, Z=-1.5, R=2.4)
+      const diningSlab = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 0.16, 32), mats.tileFloor);
+      diningSlab.position.set(6.2, 0.08, -1.5);
+      diningSlab.name = 'GF_DiningBaySlab';
+      registerMesh(diningSlab, GF, false, true, true);
+      // Warm Oak flooring inlay for 9. Lounge (X=-6.2 to 1.8, Z=1.5 to 7.0)
+      addBox(GF, -2.2, flY + 0.008, 4.25, 7.9, 0.015, 5.4, mats.woodFloor, 'GF_LoungeWood', false, false);
+
+      // --- EXTERIOR GROUND FLOOR WALLS (Dark Slate Masonry with real openings) ---
+
+      // 13. GARAGE WING (X=-12.5 to -6.0, Z=-2.5 to 3.5)
+      addWall(GF, -12.5, 3.5, -12.5, -2.5, 0, H, extT, mats.stone, [], 'GF_Garage_W');
+      addWall(GF, -12.5, -2.5, -6.0, -2.5, 0, H, extT, mats.stone, [], 'GF_Garage_N');
+      // Garage South facade: sleek pedestrian side door on far left (matching Render 1!) + subtle double garage bay
+      addWall(GF, -12.5, 3.5, -6.0, 3.5, 0, H, extT, mats.stone, [
+        { offset: 1.0, width: 1.15, sillY: 0.16, openH: 2.35, type: 'door' },
+        { offset: 3.1, width: 2.6, sillY: 0.16, openH: 2.35, type: 'garageDoor' }
+      ], 'GF_Garage_S');
+
+      // 1. VERANDA & 2. HALL (NW: X=-6.2 to -1.8, Z=-6.8 to -2.5)
+      // Veranda porch corner column
+      addBox(GF, -6.05, H / 2, -6.65, 0.34, H, 0.34, mats.stone, 'GF_VerandaPillar', true);
+      addWall(GF, -4.0, -6.8, -1.8, -6.8, 0, H, extT, mats.stone, [
+        { offset: 0.4, width: 1.2, sillY: 0.16, openH: 2.35, type: 'tealDoor' }
+      ], 'GF_Hall_N');
+      addWall(GF, -6.0, -4.2, -6.0, -2.5, 0, H, extT, mats.stone, [], 'GF_Veranda_W');
+
+      // 3. WARDROBE ROOM (Far North projecting bay: X=-1.8 to 1.8, Z=-10.5 to -6.5)
+      addWall(GF, -1.8, -6.5, -1.8, -10.5, 0, H, extT, mats.stone, [], 'GF_Wardrobe_W');
+      addWall(GF, -1.8, -10.5, 1.8, -10.5, 0, H, extT, mats.stone, [
+        { offset: 1.0, width: 1.6, sillY: 0.85, openH: 1.75, type: 'window' }
+      ], 'GF_Wardrobe_N');
+      addWall(GF, 1.8, -10.5, 1.8, -6.5, 0, H, extT, mats.stone, [], 'GF_Wardrobe_E');
+
+      // 6. KITCHEN (NE: X=1.8 to 6.4, Z=-6.8 to -3.6)
+      addWall(GF, 1.8, -6.8, 6.4, -6.8, 0, H, extT, mats.stone, [
+        { offset: 1.1, width: 2.4, sillY: 0.95, openH: 1.6, type: 'window', mullions: 3 }
+      ], 'GF_Kitchen_N');
+      addWall(GF, 6.4, -6.8, 6.4, -3.9, 0, H, extT, mats.stone, [
+        { offset: 0.7, width: 1.5, sillY: 0.95, openH: 1.6, type: 'window' }
+      ], 'GF_Kitchen_E');
+
+      // 8. DINING ROOM CURVED BAY (East circular glass wall centered X=6.2, Z=-1.5, R=2.4)
+      // Arc from -85 deg to +85 deg facing +X (angle 0 in Three.js cylinder is +Z, +PI/2 is +X)
+      addCurvedCurtainWall(GF, 6.2, -1.5, 2.38, 0.16, H - 0.16, 0.05, Math.PI - 0.1, 24, 7, false, 'GF_DiningBayGlass');
+
+      // 11. GUESTROOM WING (East projecting: X=5.8 to 10.4, Z=1.2 to 5.6)
+      addWall(GF, 6.2, 1.2, 10.4, 1.2, 0, H, extT, mats.stone, [
+        { offset: 1.4, width: 1.6, sillY: 0.8, openH: 1.75, type: 'window' }
+      ], 'GF_Guest_N');
+      addWall(GF, 10.4, 1.2, 10.4, 5.6, 0, H, extT, mats.stone, [
+        { offset: 1.3, width: 1.7, sillY: 0.8, openH: 1.75, type: 'window' }
+      ], 'GF_Guest_E');
+      // Guestroom South facade with tall narrow vertical window matching Render 1 far right!
+      addWall(GF, 10.4, 5.6, 6.0, 5.6, 0, H, extT, mats.stone, [
+        { offset: 0.45, width: 1.05, sillY: 0.25, openH: 2.35, type: 'window', mullions: 1 }
+      ], 'GF_Guest_S');
+
+      // 12. CONSERVATORY & FRONT ENTRANCE (South-East: X=0.0 to 6.0, Z=7.0)
+      // Teal-tinted front entrance door just left of the vertical coral-red fin!
+      addWall(GF, -1.0, 7.0, 1.95, 7.0, 0, H, extT, mats.stone, [
+        { offset: 0.9, width: 1.7, sillY: 0.16, openH: 2.65, type: 'tealDoor', mullions: 2 }
+      ], 'GF_FrontEntrance_S');
+
+      // Prominent Floor-to-Ceiling Conservatory Glazing under the Red Canopy (X=2.15 to 6.0, Z=7.0)
+      addWall(GF, 2.15, 7.0, 6.0, 7.0, 0, H, 0.16, mats.mullion, [
+        { offset: 0.05, width: 3.75, sillY: 0.16, openH: 2.85, type: 'window', mullions: 4 }
+      ], 'GF_Conservatory_S');
+      addWall(GF, 6.0, 5.6, 6.0, 7.0, 0, H, extT, mats.stone, [], 'GF_Conservatory_E');
+
+      // SIGNATURE VERTICAL CORAL-RED FIN WALL (Ground Floor lower leg at X=1.98, Z=7.25)
+      addBox(GF, 2.02, H / 2, 7.22, 0.46, H, 0.65, mats.redConcrete, 'GF_RedVerticalFin', false, true);
+
+      // 10. OFFICE PROJECTING BLOCK (SW: X=-5.5 to -1.0, Z=7.0 to 10.4)
+      addWall(GF, -5.5, 7.0, -5.5, 10.4, 0, H, extT, mats.stone, [], 'GF_Office_W');
+      // Office South facade with signature tall vertical dark-framed window (Render 1 & 2)
+      addWall(GF, -5.5, 10.4, -1.0, 10.4, 0, H, extT, mats.stone, [
+        { offset: 1.55, width: 1.4, sillY: 0.35, openH: 2.3, type: 'window', mullions: 1 }
+      ], 'GF_Office_S');
+      addWall(GF, -1.0, 10.4, -1.0, 7.0, 0, H, extT, mats.stone, [
+        { offset: 0.8, width: 1.3, sillY: 0.4, openH: 2.2, type: 'window' }
+      ], 'GF_Office_E');
+
+      // 9. LOUNGE SW EXTERIOR WALLS (connecting Office to Garage)
+      addWall(GF, -6.3, 3.5, -6.3, 7.0, 0, H, extT, mats.stone, [
+        { offset: 0.7, width: 2.0, sillY: 0.35, openH: 2.3, type: 'window', mullions: 2 }
+      ], 'GF_Lounge_W');
+      addWall(GF, -6.3, 7.0, -5.5, 7.0, 0, H, extT, mats.stone, [], 'GF_Lounge_S_Stub');
+
+      // --- INTERIOR PARTITION WALLS (Rooms 1–13) ---
+      const intH = 2.98;
+      // Garage to core separation wall
+      addWall(GF, -6.0, -2.5, -6.0, 3.5, flY, intH, 0.22, mats.interiorWall, [
+        { offset: 1.5, width: 0.95, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'GF_Int_GarageWall');
+
+      // Hall / Laundry / Toilets divisions (West-center)
+      addWall(GF, -6.0, -2.8, -1.6, -2.8, flY, intH, intT, mats.interiorWall, [
+        { offset: 2.6, width: 1.0, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'GF_Int_HallLaundry');
+      addWall(GF, -1.6, -6.8, -1.6, 1.5, flY, intH, intT, mats.interiorWall, [
+        { offset: 2.0, width: 1.1, sillY: 0, openH: 2.2, type: 'open' },
+        { offset: 5.2, width: 0.9, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'GF_Int_WestSpine');
+      addWall(GF, -6.0, -0.3, -1.6, -0.3, flY, intH, intT, mats.interiorWall, [], 'GF_Int_LaundryToilet');
+      addWall(GF, -3.8, -0.3, -3.8, 1.5, flY, intH, intT, mats.interiorWall, [], 'GF_Int_ToiletSplit');
+      addWall(GF, -6.0, 1.5, -1.6, 1.5, flY, intH, intT, mats.interiorWall, [
+        { offset: 0.7, width: 0.85, sillY: 0, openH: 2.05, type: 'open' },
+        { offset: 2.8, width: 0.85, sillY: 0, openH: 2.05, type: 'open' }
+      ], 'GF_Int_LoungeNorth');
+
+      // Larder (7) & Wardrobe (3) partitions
+      addWall(GF, -1.6, -6.5, 2.0, -6.5, flY, intH, intT, mats.interiorWall, [
+        { offset: 1.3, width: 1.0, sillY: 0, openH: 2.15, type: 'open' }
+      ], 'GF_Int_WardrobeS');
+      addWall(GF, -1.6, -4.1, 2.0, -4.1, flY, intH, intT, mats.interiorWall, [
+        { offset: 2.2, width: 0.9, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'GF_Int_LarderS');
+      addWall(GF, 2.0, -6.8, 2.0, -3.5, flY, intH, intT, mats.interiorWall, [], 'GF_Int_KitchenW');
+
+      // Guestroom (11) & En-suite Toilet (5) & Conservatory (12) walls
+      addWall(GF, 5.8, 1.2, 5.8, 5.6, flY, intH, intT, mats.interiorWall, [
+        { offset: 2.9, width: 0.95, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'GF_Int_GuestW');
+      addWall(GF, 7.4, 1.2, 7.4, 3.6, flY, intH, intT, mats.interiorWall, [
+        { offset: 1.4, width: 0.8, sillY: 0, openH: 2.05, type: 'open' }
+      ], 'GF_Int_GuestBathE');
+      addWall(GF, 5.8, 3.6, 7.4, 3.6, flY, intH, intT, mats.interiorWall, [], 'GF_Int_GuestBathS');
+
+      // Conservatory / Lounge partial divider
+      addWall(GF, 2.0, 4.4, 2.0, 7.0, flY, intH, 0.22, mats.interiorWall, [
+        { offset: 0.5, width: 1.4, sillY: 0, openH: 2.35, type: 'open' }
+      ], 'GF_Int_ConservatoryW');
+
+      // Lounge to Office opening wall
+      addWall(GF, -5.5, 7.0, -1.0, 7.0, flY, intH, intT, mats.interiorWall, [
+        { offset: 1.4, width: 1.8, sillY: 0, openH: 2.3, type: 'open' }
+      ], 'GF_Int_OfficeN');
+
+      // --- CENTRAL 3D U-SHAPED STAIRCASE (X=0.2 to 2.8, Z=-3.5 to 0.5) ---
+      const stairGrp = new THREE.Group();
+      stairGrp.name = 'GF_CentralStaircase';
+      GF.add(stairGrp);
+      const stepCount = 8; // 8 steps up to mid-landing, 8 steps up to First Floor
+      const rise = 3.2 / (stepCount * 2);
+      const treadD = 0.30;
+      const runW = 1.15;
+
+      // Flight 1 (West leg, climbing North from Z=0.3 to Z=-2.1)
+      for (let i = 0; i < stepCount; i++) {
+        const sy = flY + (i + 0.5) * rise;
+        const sz = 0.3 - i * treadD;
+        addBox(stairGrp, 0.85, sy, sz, runW, rise * 0.45, treadD, mats.furnitureWood, `Stair1_${i}`, false, true);
+      }
+      // Mid-landing (North end, Z=-2.75, Y=1.6)
+      addBox(stairGrp, 1.48, 1.68, -2.75, 2.45, 0.14, 1.25, mats.furnitureWood, 'StairLanding', false, true);
+      // Flight 2 (East leg, climbing South from Z=-2.1 to Z=0.3)
+      for (let i = 0; i < stepCount; i++) {
+        const sy = 1.75 + (i + 0.5) * rise;
+        const sz = -2.0 + i * treadD;
+        addBox(stairGrp, 2.1, sy, sz, runW, rise * 0.45, treadD, mats.furnitureWood, `Stair2_${i}`, false, true);
+      }
+      // Sleek glass central stairwell divider & handrail
+      addBox(stairGrp, 1.48, 1.8, -0.9, 0.05, 3.0, 2.6, mats.glass, 'StairGlassRail', false, false);
+      addBox(stairGrp, 1.48, 3.32, -0.9, 0.08, 0.06, 2.6, mats.mullion, 'StairHandrail', false, false);
+
+      // --- MINIMALIST GROUND FLOOR FURNITURE ---
+      // 13. Garage: Two stylized parked cars (matching blueprint)
+      addStylizedCar(GF, -10.6, flY, 0.4, mats.carBody1);
+      addStylizedCar(GF, -7.8, flY, 0.4, mats.carBody2);
+
+      // 9. Lounge: L-shaped sofa, circular coffee table, armchairs, piano corner & structural columns
+      addBox(GF, -2.2, flY + 0.24, 3.7, 3.0, 0.44, 0.95, mats.furnitureFabric, 'LoungeSofaBack');
+      addBox(GF, -2.2, flY + 0.56, 3.3, 3.0, 0.52, 0.22, mats.furnitureFabric, 'LoungeSofaRest');
+      addBox(GF, -3.25, flY + 0.24, 4.7, 0.95, 0.44, 1.45, mats.furnitureFabric, 'LoungeSofaChaise');
+      const coffeeTbl = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.36, 24), mats.furnitureWood);
+      coffeeTbl.position.set(-1.7, flY + 0.18, 4.9);
+      registerMesh(coffeeTbl, GF, true, true, false);
+      // Armchair
+      addBox(GF, -0.2, flY + 0.26, 4.8, 0.85, 0.48, 0.85, mats.furnitureAccent, 'LoungeChair');
+      // Structural columns matching blueprint dots
+      for (const [cx, cz] of [[-4.8, 2.4], [-2.2, 2.4], [-0.4, 2.4], [-4.8, 5.6], [-0.4, 5.6]]) {
+        const col = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, intH, 12), mats.interiorWall);
+        col.position.set(cx, flY + intH / 2, cz);
+        registerMesh(col, GF, true, true, false);
+      }
+
+      // 10. Office: Conference/Work desk + 4 chairs
+      addBox(GF, -3.25, flY + 0.38, 8.7, 1.35, 0.74, 2.1, mats.furnitureWood, 'OfficeDesk');
+      for (const [cx, cz] of [[-4.15, 8.2], [-4.15, 9.2], [-2.35, 8.2], [-2.35, 9.2]]) {
+        addBox(GF, cx, flY + 0.26, cz, 0.46, 0.5, 0.46, mats.furnitureAccent, 'OfficeChair');
+      }
+
+      // 8. Dining Room: Round dining table + 6 chairs inside East curved bay
+      const dTbl = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.08, 28), mats.furnitureWood);
+      dTbl.position.set(5.9, flY + 0.74, -1.5);
+      registerMesh(dTbl, GF, true, true, false);
+      const dPed = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.32, 0.74, 16), mats.mullion);
+      dPed.position.set(5.9, flY + 0.37, -1.5);
+      registerMesh(dPed, GF, true, true, false);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        addBox(GF, 5.9 + Math.cos(a) * 1.32, flY + 0.28, -1.5 + Math.sin(a) * 1.32, 0.44, 0.54, 0.44, mats.furnitureAccent, `DiningChair_${i}`);
+      }
+
+      // 6. Kitchen: L-shaped counter, stove, sink & island
+      addBox(GF, 4.2, flY + 0.45, -6.25, 4.0, 0.88, 0.72, mats.whiteCeramic, 'KitchenCounterN');
+      addBox(GF, 5.85, flY + 0.45, -5.0, 0.72, 0.88, 2.2, mats.whiteCeramic, 'KitchenCounterE');
+      addBox(GF, 3.8, flY + 0.9, -6.25, 0.85, 0.04, 0.55, mats.mullion, 'KitchenCooktop');
+      addBox(GF, 3.9, flY + 0.45, -4.6, 1.8, 0.88, 0.9, mats.furnitureWood, 'KitchenIsland');
+
+      // 3. Wardrobe Room: Built-in shelves & central dressing bench
+      addBox(GF, -1.3, flY + 1.1, -8.5, 0.6, 2.2, 3.2, mats.furnitureWood, 'WardrobeRackW');
+      addBox(GF, 1.3, flY + 1.1, -8.5, 0.6, 2.2, 3.2, mats.furnitureWood, 'WardrobeRackE');
+      addBox(GF, 0.0, flY + 0.25, -8.5, 0.7, 0.48, 1.6, mats.furnitureFabric, 'WardrobeBench');
+
+      // 4. Laundry & 5. Toilets fixtures
+      addBox(GF, -5.3, flY + 0.45, -1.6, 0.75, 0.88, 1.8, mats.whiteCeramic, 'LaundryUnits');
+      addBox(GF, -4.9, flY + 0.24, 0.6, 0.45, 0.46, 0.65, mats.whiteCeramic, 'WC1');
+      addBox(GF, -2.6, flY + 0.24, 0.6, 0.45, 0.46, 0.65, mats.whiteCeramic, 'WC2');
+
+      // 11. Guestroom bed + en-suite bathroom
+      addBed(GF, 8.9, flY, 3.5, 1.8, 2.1, -Math.PI / 2);
+      addBox(GF, 6.5, flY + 0.26, 2.0, 0.85, 0.5, 1.5, mats.whiteCeramic, 'GuestTub');
+
+      // 12. Conservatory bench & indoor planter
+      addBox(GF, 4.1, flY + 0.28, 5.7, 2.1, 0.46, 0.75, mats.furnitureFabric, 'ConservatorySofa');
+      const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.5, 14), mats.furnitureAccent);
+      pot.position.set(5.3, flY + 0.25, 6.3);
+      registerMesh(pot, GF, true, true, false);
+      const plant = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 12), new THREE.MeshStandardMaterial({ color: '#4d7c5b', roughness: 0.85 }));
+      plant.position.set(5.3, flY + 0.72, 6.3);
+      registerMesh(plant, GF, true, true, false);
+
+      // Two stylized minimalist human scale figures outside Conservatory entrance (matching Front Elevation Render!)
+      addScaleHuman(GF, 3.35, 0.01, 8.35, '#c97b4b', 1.66); // Person 1 (tan/rust top)
+      addScaleHuman(GF, 4.05, 0.01, 8.25, '#2b3038', 1.78); // Person 2 (dark jacket)
+
+      // Warm interior point lights for Sunset/Night mode
+      for (const [lx, ly, lz] of [[-2.0, 2.5, 4.5], [4.0, 2.5, 6.0], [5.8, 2.5, -1.5], [1.4, 2.6, -1.2], [-3.2, 2.4, 8.8], [8.5, 2.4, 3.4]]) {
+        const pt = new THREE.PointLight('#ffbe73', 0, 12, 1.6);
+        pt.position.set(lx, ly, lz);
+        GF.add(pt);
+        interiorLights.push(pt);
+      }
+    }
+
+    // =========================================================================
+    // 6. BUILD FIRST FLOOR (Y = 3.2 to 6.4m) — Rooms 1–7 + Lower Wing Roofs & Red Canopies
+    // =========================================================================
+
+    function buildFirstFloor() {
+      const FF = firstFloorGroup; // local Y = 0 corresponds to world Y = 3.2m
+      const H = 3.2;
+      const extT = 0.30;
+      const intT = 0.14;
+      const flY = 0.18;
+
+      // --- SINGLE-STORY GROUND WING ROOFS (Attached to FF level so Ground Cutaway opens them cleanly!) ---
+      // 13. Garage flat roof (X=-12.5 to -6.0, Z=-2.5 to 3.5)
+      addFlatRoof(FF, -9.25, 0, 0.5, 6.55, 6.05, 0.26, 'Roof_GarageWing');
+      // Small mechanical vent on Garage roof (visible in Render 2!)
+      addBox(FF, -9.6, 0.32, 0.4, 1.05, 0.24, 0.55, mats.stone, 'GarageRoofVent', true);
+
+      // 10. Office flat roof (X=-5.5 to -1.0, Z=7.0 to 10.4)
+      addFlatRoof(FF, -3.25, 0, 8.7, 4.55, 3.45, 0.24, 'Roof_OfficeWing');
+
+      // 11. Guestroom flat roof (X=5.8 to 10.4, Z=1.2 to 5.6)
+      addFlatRoof(FF, 8.1, 0, 3.4, 4.65, 4.45, 0.26, 'Roof_GuestWing');
+
+      // --- SIGNATURE HORIZONTAL CORAL-RED ARCHITECTURAL CANOPIES (Match Renders 1 & 2!) ---
+      // 1) Prominent South-East T-shaped Canopy over Front Entrance & Conservatory (X=-0.3 to 6.6, Z=7.0 to 8.35)
+      addBox(FF, 3.2, 0.16, 7.62, 6.95, 0.36, 1.55, mats.redConcrete, 'Canopy_RedSouthEast', false, true);
+      // Vertical Coral-Red Fin continuing up through First Floor facade (X=2.02, Z=7.22)
+      addBox(FF, 2.02, H / 2, 7.22, 0.46, H, 0.65, mats.redConcrete, 'FF_RedVerticalFin', false, true);
+
+      // 2) Horizontal Wrap-Around Coral-Red Fascia/Canopy around West/SW Lounge & Garage edge (Render 1 & 2)
+      addBox(FF, -6.55, 0.12, 5.2, 1.35, 0.32, 4.8, mats.redConcrete, 'Canopy_RedWestWrap', false, true);
+      addBox(FF, -5.6, 0.12, 7.35, 3.2, 0.32, 1.25, mats.redConcrete, 'Canopy_RedSWCorner', false, true);
+      addBox(FF, -7.8, 0.12, 3.62, 3.6, 0.32, 0.45, mats.redConcrete, 'Canopy_RedGarageLip', false, true);
+      // Small NW red canopy accent visible on far left edge of Render 2
+      addBox(FF, -6.55, 0.12, -3.6, 1.1, 0.32, 3.2, mats.redConcrete, 'Canopy_RedNW', false, true);
+
+      // --- FIRST FLOOR SLABS (With real rectangular stairwell opening at X=0.2 to 2.8, Z=-3.5 to 0.5) ---
+      // West side slab (X=-6.1 to 0.2, Z=-6.8 to 6.8)
+      addBox(FF, -2.95, 0.09, 0.0, 6.3, 0.18, 13.6, mats.woodFloor, 'FF_SlabWest');
+      // North projecting bedroom slab (X=-1.7 to 1.8, Z=-10.4 to -6.5)
+      addBox(FF, 0.05, 0.09, -8.45, 3.5, 0.18, 3.9, mats.woodFloor, 'FF_SlabNorthBay');
+      // North-center bridge behind stairwell (X=0.2 to 2.8, Z=-6.8 to -3.5)
+      addBox(FF, 1.5, 0.09, -5.15, 2.6, 0.18, 3.3, mats.woodFloor, 'FF_SlabNorthBridge');
+      // South-center slab in front of stairwell (X=0.2 to 2.8, Z=0.5 to 6.8)
+      addBox(FF, 1.5, 0.09, 3.65, 2.6, 0.18, 6.3, mats.woodFloor, 'FF_SlabSouthCenter');
+      // East slab (X=2.8 to 6.2, Z=-6.8 to 6.8)
+      addBox(FF, 4.5, 0.09, 0.0, 3.4, 0.18, 13.6, mats.woodFloor, 'FF_SlabEast');
+      // Tile inlay for Main Bathroom (X=2.1 to 4.5, Z=1.0 to 4.6) & West Bathroom
+      addBox(FF, 3.3, flY + 0.008, 2.8, 2.35, 0.015, 3.5, mats.tileFloor, 'FF_MainBathTile', false, false);
+      addBox(FF, -3.8, flY + 0.008, 0.2, 4.3, 0.015, 1.5, mats.tileFloor, 'FF_WestBathTile', false, false);
+
+      // Circular floor disc for Large Workroom Rotunda (X=-2.2, Z=3.8, R=3.8)
+      const rotSlab = new THREE.Mesh(new THREE.CylinderGeometry(3.8, 3.8, 0.18, 40), mats.woodFloor);
+      rotSlab.position.set(-2.2, 0.09, 3.8);
+      rotSlab.name = 'FF_RotundaSlab';
+      registerMesh(rotSlab, FF, false, true, true);
+
+      // Circular floor disc for East Bedroom Turret (X=6.2, Z=-1.5, R=2.4)
+      const turSlab = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 2.4, 0.18, 32), mats.woodFloor);
+      turSlab.position.set(6.2, 0.09, -1.5);
+      turSlab.name = 'FF_TurretSlab';
+      registerMesh(turSlab, FF, false, true, true);
+
+      // --- FIRST FLOOR EXTERIOR WALLS & CURVED GLASS VOLUMES ---
+
+      // 1) LARGE CYLINDRICAL GLASS ROTUNDA (Workroom #1, centered X=-2.2, Z=3.8, R=3.8m)
+      // Prominent South-facing curved curtain wall drum spanning ~240° around the South/West/East rim
+      addCurvedCurtainWall(FF, -2.2, 3.8, 3.78, 0.18, H - 0.18, -Math.PI * 0.65, Math.PI * 1.32, 36, 13, true, 'FF_MainRotundaGlass');
+
+      // Dark stone wing left/behind the Rotunda with tall corner window (visible on far left of Rotunda in Render 1 & 2)
+      addWall(FF, -6.1, -6.8, -6.1, 4.6, 0, H, extT, mats.stone, [
+        { offset: 1.5, width: 1.8, sillY: 0.9, openH: 1.6, type: 'window' },
+        { offset: 4.8, width: 2.0, sillY: 0.9, openH: 1.6, type: 'window' },
+        { offset: 9.8, width: 1.0, sillY: 0.75, openH: 1.8, type: 'window', mullions: 1 }
+      ], 'FF_WestWall');
+      // Small angled/corner return beside Rotunda (Render 2 detail)
+      addWall(FF, -6.1, 4.6, -5.2, 4.6, 0, H, extT, mats.stone, [], 'FF_RotundaFlankW');
+
+      // North Exterior Walls (4. Children Bedrooms: NW, North-Center projecting, NE)
+      addWall(FF, -6.1, -6.8, -1.7, -6.8, 0, H, extT, mats.stone, [
+        { offset: 1.2, width: 1.8, sillY: 0.9, openH: 1.6, type: 'window' }
+      ], 'FF_NWBed_N');
+      addWall(FF, -1.7, -6.8, -1.7, -10.4, 0, H, extT, mats.stone, [], 'FF_NorthBay_W');
+      addWall(FF, -1.7, -10.4, 1.8, -10.4, 0, H, extT, mats.stone, [
+        { offset: 0.9, width: 1.7, sillY: 0.9, openH: 1.6, type: 'window' }
+      ], 'FF_NorthBay_N');
+      addWall(FF, 1.8, -10.4, 1.8, -6.8, 0, H, extT, mats.stone, [], 'FF_NorthBay_E');
+      addWall(FF, 1.8, -6.8, 6.2, -6.8, 0, H, extT, mats.stone, [
+        { offset: 1.2, width: 1.8, sillY: 0.9, openH: 1.6, type: 'window' }
+      ], 'FF_NEBed_N');
+
+      // East Exterior Wall + 5. Bedroom Circular Glass Turret (X=6.2, Z=-1.5, R=2.4)
+      addWall(FF, 6.2, -6.8, 6.2, -3.9, 0, H, extT, mats.stone, [
+        { offset: 0.6, width: 1.4, sillY: 0.9, openH: 1.6, type: 'window' }
+      ], 'FF_NEBed_E');
+      addCurvedCurtainWall(FF, 6.2, -1.5, 2.38, 0.18, H - 0.18, 0.05, Math.PI - 0.1, 24, 7, true, 'FF_EastTurretGlass');
+      // Subtle Turquoise Accent Wall Fin right behind East Turret (matches Render 1 upper right!)
+      addBox(FF, 6.45, H * 0.56, 0.85, 0.36, H * 0.85, 0.9, mats.tealConcrete, 'FF_EastTealFin', false, true);
+
+      // South-East Block (6. Wardrobe Room & 7. Boxroom: X=2.0 to 6.2, Z=1.0 to 6.8)
+      addWall(FF, 6.2, 0.9, 6.2, 6.8, 0, H, extT, mats.stone, [
+        { offset: 1.6, width: 1.4, sillY: 1.0, openH: 1.45, type: 'window' }
+      ], 'FF_SE_E');
+      // Signature South facade of First Floor SE block with crisp square/vertical window centered above red canopy (Render 1!)
+      addWall(FF, 6.2, 6.8, 1.7, 6.8, 0, H, extT, mats.stone, [
+        { offset: 1.4, width: 1.45, sillY: 0.75, openH: 1.85, type: 'window', mullions: 2 }
+      ], 'FF_Boxroom_S');
+
+      // --- FIRST FLOOR INTERIOR PARTITIONS (Rooms 1–7) ---
+      const intH = 2.95;
+      // West rooms divider (NW Child Bed #4, Gym/Game Room #3, West Bathroom #2)
+      addWall(FF, -6.0, -3.5, -1.5, -3.5, flY, intH, intT, mats.interiorWall, [], 'FF_Int_NWBedS');
+      addWall(FF, -6.0, -0.6, -1.5, -0.6, flY, intH, intT, mats.interiorWall, [], 'FF_Int_GymS');
+      addWall(FF, -6.0, 1.0, -1.5, 1.0, flY, intH, intT, mats.interiorWall, [], 'FF_Int_WBathS');
+      addWall(FF, -1.5, -6.8, -1.5, 1.0, flY, intH, intT, mats.interiorWall, [
+        { offset: 1.2, width: 0.9, sillY: 0, openH: 2.1, type: 'open' },
+        { offset: 4.5, width: 1.0, sillY: 0, openH: 2.1, type: 'open' },
+        { offset: 6.4, width: 0.85, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'FF_Int_WestHall');
+
+      // North-Center & NE Children Bedrooms (#4)
+      addWall(FF, -1.5, -6.4, 1.9, -6.4, flY, intH, intT, mats.interiorWall, [
+        { offset: 1.2, width: 0.95, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'FF_Int_NBedS');
+      addWall(FF, 2.0, -6.8, 2.0, -3.5, flY, intH, intT, mats.interiorWall, [
+        { offset: 1.5, width: 0.9, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'FF_Int_NEBedW');
+      addWall(FF, 2.0, -3.5, 6.0, -3.5, flY, intH, intT, mats.interiorWall, [], 'FF_Int_NEBedS');
+
+      // East Bedroom (#5), Main Bathroom (#2), Wardrobe (#6), Boxroom (#7)
+      addWall(FF, 2.9, -3.5, 2.9, 1.0, flY, intH, intT, mats.interiorWall, [
+        { offset: 2.4, width: 0.95, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'FF_Int_TurretBedW');
+      addWall(FF, 2.0, 1.0, 6.0, 1.0, flY, intH, intT, mats.interiorWall, [], 'FF_Int_MainBathN');
+      addWall(FF, 2.0, 1.0, 2.0, 6.6, flY, intH, intT, mats.interiorWall, [
+        { offset: 1.0, width: 0.9, sillY: 0, openH: 2.1, type: 'open' },
+        { offset: 4.0, width: 0.9, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'FF_Int_SEHall');
+      addWall(FF, 4.4, 1.0, 4.4, 4.6, flY, intH, intT, mats.interiorWall, [
+        { offset: 1.4, width: 0.85, sillY: 0, openH: 2.1, type: 'open' }
+      ], 'FF_Int_WardrobeW');
+      addWall(FF, 2.0, 4.6, 6.0, 4.6, flY, intH, intT, mats.interiorWall, [], 'FF_Int_BoxroomN');
+
+      // Glass Safety Balustrade around First Floor Stairwell Opening (X=0.2 to 2.8, Z=-3.5 to 0.5)
+      addBox(FF, 0.22, flY + 0.52, -1.5, 0.06, 1.0, 4.0, mats.glass, 'FF_StairGuardW', false, false);
+      addBox(FF, 1.5, flY + 0.52, -3.5, 2.6, 1.0, 0.06, mats.glass, 'FF_StairGuardN', false, false);
+      addBox(FF, 1.5, flY + 0.52, 0.5, 1.3, 1.0, 0.06, mats.glass, 'FF_StairGuardS', false, false);
+      addBox(FF, 0.22, flY + 1.04, -1.5, 0.08, 0.05, 4.04, mats.mullion, 'FF_StairCapW', false, false);
+
+      // --- MINIMALIST FIRST FLOOR FURNITURE ---
+      // 1. Workroom (inside circular rotunda): Circular rug, round studio table, drafting desks
+      const rug = new THREE.Mesh(new THREE.CylinderGeometry(1.65, 1.65, 0.02, 32), mats.furnitureFabric);
+      rug.position.set(-2.2, flY + 0.02, 4.1);
+      registerMesh(rug, FF, false, true, false);
+      const studioTbl = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.72, 24), mats.furnitureWood);
+      studioTbl.position.set(-2.2, flY + 0.36, 4.1);
+      registerMesh(studioTbl, FF, true, true, false);
+      addBox(FF, -4.6, flY + 0.38, 2.8, 0.85, 0.74, 2.2, mats.furnitureWood, 'StudioDeskW');
+      addBox(FF, -0.2, flY + 0.38, 2.4, 1.9, 0.74, 0.8, mats.furnitureWood, 'StudioDeskE');
+      addBox(FF, -3.5, flY + 0.28, 5.6, 1.4, 0.52, 0.75, mats.furnitureAccent, 'StudioLoungeBench');
+
+      // 2. Main Bathroom (freestanding oval tub + double vanity) & West Bathroom
+      const tub = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.38, 0.56, 20), mats.whiteCeramic);
+      tub.scale.set(1.0, 1.0, 1.85);
+      tub.position.set(3.2, flY + 0.28, 3.4);
+      registerMesh(tub, FF, true, true, false);
+      addBox(FF, 2.55, flY + 0.42, 1.65, 0.6, 0.82, 1.5, mats.whiteCeramic, 'MainBathVanity');
+      addBox(FF, -4.8, flY + 0.42, 0.2, 1.4, 0.82, 0.55, mats.whiteCeramic, 'WestBathVanity');
+
+      // 3. Gym / Game Room (stylized treadmill, weight bench, exercise mats)
+      addBox(FF, -4.8, flY + 0.12, -2.1, 0.85, 0.16, 1.9, mats.mullion, 'TreadmillDeck');
+      addBox(FF, -4.8, flY + 0.68, -2.95, 0.85, 1.1, 0.16, mats.mullion, 'TreadmillConsole');
+      addBox(FF, -3.1, flY + 0.26, -2.1, 0.55, 0.46, 1.4, mats.furnitureAccent, 'WeightBench');
+      addBox(FF, -2.2, flY + 0.02, -1.9, 0.8, 0.03, 1.8, mats.tealConcrete, 'YogaMat', false, false);
+
+      // 4. Three Children Bedrooms (NW, North-Center projecting, NE)
+      addBed(FF, -4.7, flY, -5.4, 1.15, 2.0, 0);
+      addBox(FF, -2.6, flY + 0.38, -6.1, 1.3, 0.74, 0.65, mats.furnitureWood, 'NWDesk');
+
+      addBed(FF, -0.6, flY, -9.0, 1.15, 2.0, 0);
+      addBox(FF, 1.0, flY + 0.38, -8.4, 0.65, 0.74, 1.35, mats.furnitureWood, 'NorthBayDesk');
+
+      addBed(FF, 4.7, flY, -5.4, 1.15, 2.0, 0);
+      addBox(FF, 3.0, flY + 0.38, -6.1, 1.3, 0.74, 0.65, mats.furnitureWood, 'NEDesk');
+
+      // 5. Bedroom inside East Circular Turret (centered X=6.2, Z=-1.5)
+      addBed(FF, 5.7, flY, -1.5, 1.85, 2.1, Math.PI / 2);
+
+      // 6. Wardrobe Room & 7. Boxroom shelving
+      addBox(FF, 5.75, flY + 1.05, 2.8, 0.55, 2.1, 3.1, mats.furnitureWood, 'FF_WardrobeCloset');
+      addBox(FF, 4.2, flY + 0.95, 5.1, 3.2, 1.9, 0.55, mats.furnitureWood, 'FF_BoxroomShelving');
+
+      // Warm interior point lights on First Floor (Rotunda glow + East Turret + Stairwell)
+      for (const [lx, ly, lz] of [[-2.2, 2.4, 4.0], [5.8, 2.4, -1.5], [1.4, 2.8, -1.6], [-3.8, 2.3, -2.0], [4.0, 2.3, 5.6]]) {
+        const pt = new THREE.PointLight('#ffbe73', 0, 13, 1.6);
+        pt.position.set(lx, ly, lz);
+        FF.add(pt);
+        interiorLights.push(pt);
+      }
+    }
+
+    // =========================================================================
+    // 7. BUILD ROOF GROUP (Y = 6.4m+) — Roof Slabs, Rotunda Oculus, Clerestory Box, Red & Teal Spines
+    // =========================================================================
+
+    function buildRoofGroup() {
+      const RG = roofGroup; // local Y = 0 corresponds to world Y = 6.4m
+
+      // --- MAIN FLAT ROOF DECKS WITH RAISED PARAPETS ---
+      // West Main Block Roof (X=-6.1 to 1.85, Z=-6.8 to 0.5)
+      addFlatRoof(RG, -2.12, 0, -3.15, 7.95, 7.35, 0.30, 'Roof_MainWest');
+      // Subtle dark roof skylight/vent curbs on West roof (matching Render 2!)
+      addBox(RG, -4.4, 0.32, -3.2, 1.2, 0.24, 0.55, mats.stone, 'RoofVent_W1', true);
+      addBox(RG, -3.3, 0.32, -5.0, 1.0, 0.24, 0.45, mats.stone, 'RoofVent_W2', true);
+
+      // North Projecting Bay Roof (X=-1.7 to 1.85, Z=-10.4 to -6.7)
+      addFlatRoof(RG, 0.08, 0, -8.55, 3.55, 3.75, 0.28, 'Roof_NorthBay');
+
+      // East Main Block Roof (X=2.0 to 6.25, Z=-6.8 to 6.85)
+      addFlatRoof(RG, 4.12, 0, 0.02, 4.25, 13.65, 0.30, 'Roof_MainEast');
+
+      // SW Studio Connector Roof behind/around Rotunda (X=-6.1 to 1.9, Z=0.4 to 4.6)
+      addFlatRoof(RG, -2.1, 0, 2.5, 8.0, 4.25, 0.26, 'Roof_SWBase');
+
+      // --- LARGE CIRCULAR ROTUNDA ROOF WITH RECESSED CIRCULAR GLASS OCULUS SKYLIGHT ---
+      const rotRoofGrp = new THREE.Group();
+      rotRoofGrp.name = 'Roof_RotundaWithOculus';
+      rotRoofGrp.position.set(-2.2, 0.16, 3.8);
+      RG.add(rotRoofGrp);
+
+      // Hollow circular roof ring (outer R = 3.92, inner oculus hole R = 1.38) using ExtrudeGeometry
+      const ringShape = new THREE.Shape();
+      ringShape.absarc(0, 0, 3.92, 0, Math.PI * 2, false);
+      const holePath = new THREE.Path();
+      holePath.absarc(0, 0, 1.38, 0, Math.PI * 2, true);
+      ringShape.holes.push(holePath);
+
+      const roofRingGeo = new THREE.ExtrudeGeometry(ringShape, { depth: 0.24, bevelEnabled: false, curveSegments: 48 });
+      roofRingGeo.rotateX(Math.PI / 2);
+      const roofRingMesh = new THREE.Mesh(roofRingGeo, mats.roof);
+      roofRingMesh.position.y = 0.24;
+      roofRingMesh.name = 'RotundaRoofSlab';
+      registerMesh(roofRingMesh, rotRoofGrp, true, true, true);
+
+      // Raised outer circular parapet rim
+      const outerParShape = new THREE.Shape();
+      outerParShape.absarc(0, 0, 3.95, 0, Math.PI * 2, false);
+      const outerParHole = new THREE.Path();
+      outerParHole.absarc(0, 0, 3.72, 0, Math.PI * 2, true);
+      outerParShape.holes.push(outerParHole);
+      const outerParGeo = new THREE.ExtrudeGeometry(outerParShape, { depth: 0.28, bevelEnabled: false, curveSegments: 48 });
+      outerParGeo.rotateX(Math.PI / 2);
+      const outerParMesh = new THREE.Mesh(outerParGeo, mats.parapetCap);
+      outerParMesh.position.y = 0.50;
+      outerParMesh.name = 'RotundaOuterParapet';
+      registerMesh(outerParMesh, rotRoofGrp, true, true, true);
+
+      // Inner Oculus curb frame + Circular Glass Skylight Dome/Pane
+      const oculusCurbShape = new THREE.Shape();
+      oculusCurbShape.absarc(0, 0, 1.50, 0, Math.PI * 2, false);
+      const oculusCurbHole = new THREE.Path();
+      oculusCurbHole.absarc(0, 0, 1.34, 0, Math.PI * 2, true);
+      oculusCurbShape.holes.push(oculusCurbHole);
+      const oculusCurbGeo = new THREE.ExtrudeGeometry(oculusCurbShape, { depth: 0.22, bevelEnabled: false, curveSegments: 36 });
+      oculusCurbGeo.rotateX(Math.PI / 2);
+      const oculusCurbMesh = new THREE.Mesh(oculusCurbGeo, mats.parapetCap);
+      oculusCurbMesh.position.y = 0.40;
+      oculusCurbMesh.name = 'RotundaOculusCurb';
+      registerMesh(oculusCurbMesh, rotRoofGrp, true, true, true);
+
+      const oculusGlass = new THREE.Mesh(new THREE.CylinderGeometry(1.36, 1.36, 0.05, 36), mats.glass);
+      oculusGlass.position.y = 0.30;
+      oculusGlass.name = 'RotundaOculusGlass';
+      registerMesh(oculusGlass, rotRoofGrp, false, false, false);
+
+      // Subtle skylight cross mullions inside oculus
+      addBox(rotRoofGrp, 0, 0.32, 0, 2.7, 0.06, 0.05, mats.mullion, 'OculusMulX', false, false);
+      addBox(rotRoofGrp, 0, 0.32, 0, 0.05, 0.06, 2.7, mats.mullion, 'OculusMulZ', false, false);
+
+      // --- SMALLER EAST CIRCULAR TURRET ROOF CAP (Centered X=6.2, Z=-1.5, R=2.48) ---
+      const turRoof = new THREE.Mesh(new THREE.CylinderGeometry(2.48, 2.48, 0.22, 32), mats.roof);
+      turRoof.position.set(6.2, 0.16, -1.5);
+      turRoof.name = 'EastTurretRoofDeck';
+      registerMesh(turRoof, RG, true, true, true);
+
+      const turParShape = new THREE.Shape();
+      turParShape.absarc(0, 0, 2.50, 0, Math.PI * 2, false);
+      const turParHole = new THREE.Path();
+      turParHole.absarc(0, 0, 2.32, 0, Math.PI * 2, true);
+      turParShape.holes.push(turParHole);
+      const turParGeo = new THREE.ExtrudeGeometry(turParShape, { depth: 0.24, bevelEnabled: false, curveSegments: 32 });
+      turParGeo.rotateX(Math.PI / 2);
+      const turParMesh = new THREE.Mesh(turParGeo, mats.parapetCap);
+      turParMesh.position.set(6.2, 0.44, -1.5);
+      turParMesh.name = 'EastTurretParapet';
+      registerMesh(turParMesh, RG, true, true, true);
+
+      // --- CENTRAL RECTANGULAR GLASS CLERESTORY SKYLIGHT BOX (Above Central Staircase, rises to world Y=8.4m) ---
+      const skyGrp = new THREE.Group();
+      skyGrp.name = 'CentralClerestorySkylightBox';
+      skyGrp.position.set(1.4, 0.18, -1.8); // X: 0.1 to 2.7, Z: -3.5 to -0.1
+      RG.add(skyGrp);
+
+      const sw = 2.6;
+      const sd = 3.5;
+      const sh = 1.9;
+
+      // Clerestory glass faces with dark charcoal mullions
+      addWall(skyGrp, -sw / 2, sd / 2, sw / 2, sd / 2, 0, sh, 0.1, mats.mullion, [
+        { offset: 0.08, width: sw - 0.16, sillY: 0.08, openH: sh - 0.18, type: 'window', mullions: 3 }
+      ], 'Skylight_S');
+      addWall(skyGrp, sw / 2, -sd / 2, -sw / 2, -sd / 2, 0, sh, 0.1, mats.mullion, [
+        { offset: 0.08, width: sw - 0.16, sillY: 0.08, openH: sh - 0.18, type: 'window', mullions: 3 }
+      ], 'Skylight_N');
+      addWall(skyGrp, -sw / 2, -sd / 2, -sw / 2, sd / 2, 0, sh, 0.1, mats.mullion, [
+        { offset: 0.08, width: sd - 0.16, sillY: 0.08, openH: sh - 0.18, type: 'window', mullions: 4 }
+      ], 'Skylight_W');
+      addWall(skyGrp, sw / 2, sd / 2, sw / 2, -sd / 2, 0, sh, 0.1, mats.mullion, [
+        { offset: 0.08, width: sd - 0.16, sillY: 0.08, openH: sh - 0.18, type: 'window', mullions: 4 }
+      ], 'Skylight_E');
+
+      // Clerestory flat dark roof cap with crisp overhang
+      addFlatRoof(skyGrp, 0, sh, 0, sw + 0.24, sd + 0.24, 0.18, 'SkylightRoofCap');
+
+      // --- SIGNATURE INTERSECTING ARCHITECTURAL ROOF SPINE BEAMS (Match Renders 1 & 2!) ---
+      // 1) Coral-Red North-South Spine Wall/Beam (X=2.02, running Z=-10.3 to Z=7.55, stepping higher at South fin!)
+      addBox(RG, 2.02, 0.44, -1.5, 0.46, 0.88, 17.6, mats.redConcrete, 'Roof_RedNorthSouthSpine', false, true);
+      // Signature tall vertical Coral-Red Fin Peak at the South Elevation (visible rising above roof in Render 1 & 2!)
+      addBox(RG, 2.02, 0.62, 7.22, 0.48, 1.32, 0.72, mats.redConcrete, 'Roof_RedFinTopPeak', false, true);
+
+      // 2) Turquoise/Teal East-West Spine Beam running right behind the main Rotunda (Z=0.15, X=-6.35 to 6.55)
+      addBox(RG, 0.1, 0.40, 0.15, 12.95, 0.80, 0.46, mats.tealConcrete, 'Roof_TealEastWestSpine', false, true);
+      // Slight downward wrap on West flank of teal beam (matching Render 2!)
+      addBox(RG, -6.22, -0.22, 0.15, 0.36, 0.85, 0.46, mats.tealConcrete, 'Roof_TealWestCap', false, true);
+    }
+
+    // Build all three levels
+    buildGroundFloor();
+    buildFirstFloor();
+    buildRoofGroup();
+
+    // =========================================================================
+    // 8. 3D-TO-2D PROJECTED ROOM LABELS (Blueprint Ground 1–13, First 1–7, Exterior)
+    // =========================================================================
+
+    const LABELS_DATA = {
+      ground: [
+        { num: '1', name: 'Veranda', x: -5.0, y: 1.5, z: -5.2 },
+        { num: '2', name: 'Hall', x: -2.8, y: 1.5, z: -4.8 },
+        { num: '3', name: 'Wardrobe Room', x: 0.0, y: 1.5, z: -8.6 },
+        { num: '4', name: 'Laundry Room', x: -3.8, y: 1.5, z: -1.6 },
+        { num: '5', name: 'Toilet', x: -4.8, y: 1.5, z: 0.6 },
+        { num: '5', name: 'En-suite', x: 6.6, y: 1.5, z: 2.3 },
+        { num: '6', name: 'Kitchen', x: 4.3, y: 1.5, z: -5.2 },
+        { num: '7', name: 'Larder', x: 0.2, y: 1.5, z: -5.3 },
+        { num: '8', name: 'Dining Room', x: 6.0, y: 1.5, z: -1.5 },
+        { num: '9', name: 'Lounge', x: -2.2, y: 1.5, z: 4.4 },
+        { num: '10', name: 'Office', x: -3.25, y: 1.5, z: 8.8 },
+        { num: '11', name: 'Guestroom', x: 8.8, y: 1.5, z: 3.6 },
+        { num: '12', name: 'Conservatory', x: 4.1, y: 1.5, z: 6.0 },
+        { num: '13', name: 'Garage', x: -9.2, y: 1.5, z: 0.5 }
+      ],
+      first: [
+        { num: '1', name: 'Workroom (Rotunda)', x: -2.2, y: 1.6, z: 4.2 },
+        { num: '2', name: 'Bathroom', x: -3.8, y: 1.6, z: 0.2 },
+        { num: '2', name: 'Main Bathroom', x: 3.2, y: 1.6, z: 2.8 },
+        { num: '3', name: 'Gym / Game Room', x: -3.8, y: 1.6, z: -2.1 },
+        { num: '4', name: 'Children Bedroom', x: -3.8, y: 1.6, z: -5.2 },
+        { num: '4', name: 'Children Bedroom', x: 0.0, y: 1.6, z: -8.5 },
+        { num: '4', name: 'Children Bedroom', x: 4.0, y: 1.6, z: -5.2 },
+        { num: '5', name: 'Bedroom (Turret)', x: 6.1, y: 1.6, z: -1.5 },
+        { num: '6', name: 'Wardrobe Room', x: 5.3, y: 1.6, z: 2.8 },
+        { num: '7', name: 'Boxroom', x: 4.1, y: 1.6, z: 5.7 }
+      ],
+      exterior: [
+        { num: 'A', name: 'Glass Rotunda & Oculus', x: -2.2, y: 7.4, z: 3.8, grp: 'roof' },
+        { num: 'B', name: 'Clerestory Skylight Box', x: 1.4, y: 9.0, z: -1.8, grp: 'roof' },
+        { num: 'C', name: 'Coral-Red Spine & Canopy', x: 2.02, y: 7.9, z: 7.2, grp: 'roof' },
+        { num: 'D', name: 'Teal Roof Spine Beam', x: -4.2, y: 7.3, z: 0.15, grp: 'roof' },
+        { num: 'E', name: 'East Glass Turret', x: 6.8, y: 5.2, z: -1.5, grp: 'first' },
+        { num: 'F', name: 'Conservatory Entrance', x: 4.0, y: 2.2, z: 7.4, grp: 'ground' },
+        { num: 'G', name: 'Garage Wing', x: -9.2, y: 2.4, z: 3.4, grp: 'ground' },
+        { num: 'H', name: 'Office Wing', x: -3.25, y: 2.2, z: 10.4, grp: 'ground' },
+        { num: 'I', name: 'Guestroom Wing', x: 8.6, y: 2.2, z: 5.4, grp: 'ground' }
+      ]
+    };
+
+    const labelsLayer = document.getElementById('labels-layer');
+    let activeBadges = [];
+
+    const state = {
+      mode: 'exterior', // 'exterior' | 'first' | 'ground' | 'exploded'
+      showLabels: true,
+      blueprintMode: false,
+      showGrid: true,
+      timeOfDay: 13.0,
+      targetFirstY: 3.2,
+      targetRoofY: 6.4,
+      camAnimating: false,
+      camTargetPos: new THREE.Vector3(),
+      camTargetLook: new THREE.Vector3()
+    };
+
+    function rebuildLabels() {
+      labelsLayer.innerHTML = '';
+      activeBadges = [];
+      if (!state.showLabels) return;
+
+      let list = [];
+      let styleClass = 'exterior';
+
+      if (state.mode === 'ground') {
+        list = LABELS_DATA.ground.map(d => ({ ...d, grp: 'ground', cls: 'ground-floor' }));
+      } else if (state.mode === 'first') {
+        list = LABELS_DATA.first.map(d => ({ ...d, grp: 'first', cls: 'first-floor' }));
+      } else if (state.mode === 'exploded') {
+        list = [
+          { num: 'GF', name: 'Ground Floor (Rooms 1–13)', x: -6.8, y: 1.8, z: 6.5, grp: 'ground', cls: 'ground-floor' },
+          { num: 'FF', name: 'First Floor (Rooms 1–7)', x: -6.8, y: 1.8, z: 4.5, grp: 'first', cls: 'first-floor' },
+          { num: 'RF', name: 'Roof, Oculus & Spine Beams', x: -4.8, y: 1.4, z: 2.5, grp: 'roof', cls: 'exterior' },
+          { num: '1', name: 'Workroom', x: -2.2, y: 1.6, z: 4.2, grp: 'first', cls: 'first-floor' },
+          { num: '9', name: 'Lounge', x: -2.2, y: 1.5, z: 4.4, grp: 'ground', cls: 'ground-floor' },
+          { num: '13', name: 'Garage', x: -9.2, y: 1.5, z: 0.5, grp: 'ground', cls: 'ground-floor' },
+          { num: '8', name: 'Dining Bay', x: 6.2, y: 1.5, z: -1.5, grp: 'ground', cls: 'ground-floor' },
+          { num: '5', name: 'Turret Bedroom', x: 6.2, y: 1.6, z: -1.5, grp: 'first', cls: 'first-floor' }
+        ];
+      } else {
+        list = LABELS_DATA.exterior.map(d => ({ ...d, cls: 'exterior' }));
+      }
+
+      for (const item of list) {
+        const el = document.createElement('div');
+        el.className = `room-badge ${item.cls} ${state.blueprintMode ? 'blueprint-badge' : ''}`;
+        el.innerHTML = `<span class="num-dot">${item.num}</span><span>${item.name}</span>`;
+        labelsLayer.appendChild(el);
+        activeBadges.push({ el, item });
+      }
+    }
+
+    const _projVec = new THREE.Vector3();
+    function updateProjectedLabels() {
+      if (!state.showLabels || activeBadges.length === 0) return;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+
+      for (const { el, item } of activeBadges) {
+        let baseY = 0;
+        if (item.grp === 'first') baseY = firstFloorGroup.position.y;
+        else if (item.grp === 'roof') baseY = roofGroup.position.y;
+        else baseY = groundFloorGroup.position.y;
+
+        // Exterior labels store absolute world Y in exterior mode; offset relative to group base
+        let wy = item.y;
+        if (state.mode === 'exterior') {
+          wy = item.y;
+        } else {
+          wy = baseY + item.y;
+        }
+
+        _projVec.set(item.x, wy, item.z);
+        _projVec.project(camera);
+
+        if (_projVec.z > 1 || _projVec.z < -1) {
+          el.style.opacity = '0';
+          continue;
+        }
+        const sx = (_projVec.x * 0.5 + 0.5) * w;
+        const sy = (-_projVec.y * 0.5 + 0.5) * h;
+
+        if (sx < -40 || sx > w + 40 || sy < -30 || sy > h + 30) {
+          el.style.opacity = '0';
+        } else {
+          el.style.opacity = '1';
+          el.style.left = `${sx}px`;
+          el.style.top = `${sy}px`;
+        }
+      }
+    }
+
+    // =========================================================================
+    // 9. VIEW MODES, CAMERA PRESETS, BLUEPRINT MODE & TIME OF DAY LIGHTING
+    // =========================================================================
+
+    function setViewMode(mode) {
+      state.mode = mode;
+      const tagMap = {
+        exterior: 'Exterior',
+        first: '1st Floor',
+        ground: 'Ground Floor',
+        exploded: 'Exploded'
+      };
+      document.getElementById('active-mode-tag').textContent = tagMap[mode];
+
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        const active = btn.dataset.mode === mode;
+        btn.className = active
+          ? 'mode-btn px-2.5 py-2 rounded-xl text-[11px] font-medium transition text-left bg-[#c94854] text-white shadow-sm'
+          : 'mode-btn px-2.5 py-2 rounded-xl text-[11px] font-medium transition text-left bg-white/5 hover:bg-white/12 text-slate-200 border border-white/5';
+      });
+
+      if (mode === 'exterior') {
+        groundFloorGroup.visible = true;
+        firstFloorGroup.visible = true;
+        roofGroup.visible = true;
+        state.targetFirstY = 3.2;
+        state.targetRoofY = 6.4;
+      } else if (mode === 'first') {
+        groundFloorGroup.visible = true;
+        firstFloorGroup.visible = true;
+        roofGroup.visible = false;
+        state.targetFirstY = 3.2;
+        state.targetRoofY = 6.4;
+      } else if (mode === 'ground') {
+        groundFloorGroup.visible = true;
+        firstFloorGroup.visible = false;
+        roofGroup.visible = false;
+        state.targetFirstY = 3.2;
+        state.targetRoofY = 6.4;
+      } else if (mode === 'exploded') {
+        groundFloorGroup.visible = true;
+        firstFloorGroup.visible = true;
+        roofGroup.visible = true;
+        state.targetFirstY = 3.2 + 4.5;
+        state.targetRoofY = 6.4 + 9.0;
+      }
+
+      rebuildLabels();
+    }
+
+    const CAM_PRESETS = {
+      iso: { pos: new THREE.Vector3(-20.5, 16.5, 22.0), look: new THREE.Vector3(-0.5, 2.8, 0.2) },
+      front: { pos: new THREE.Vector3(-0.5, 4.4, 30.5), look: new THREE.Vector3(-0.5, 3.3, 0.0) },
+      top: { pos: new THREE.Vector3(-0.5, 35.0, 0.05), look: new THREE.Vector3(-0.5, 0.5, 0.0) },
+      rear: { pos: new THREE.Vector3(18.5, 14.5, -22.5), look: new THREE.Vector3(-0.5, 2.8, -0.5) }
+    };
+
+    function setCameraPreset(presetKey) {
+      const p = CAM_PRESETS[presetKey];
+      if (!p) return;
+      state.camTargetPos.copy(p.pos);
+      state.camTargetLook.copy(p.look);
+      if (state.mode === 'exploded' && presetKey !== 'top') {
+        state.camTargetPos.y += 4.5;
+        state.camTargetLook.y += 3.5;
+      }
+      state.camAnimating = true;
+
+      document.querySelectorAll('.cam-btn').forEach(btn => {
+        const active = btn.dataset.cam === presetKey;
+        btn.className = active
+          ? 'cam-btn px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition bg-[#4eb8bc]/20 text-[#8de0e3] border border-[#4eb8bc]/40'
+          : 'cam-btn px-2.5 py-1.5 rounded-xl text-[11px] font-medium transition bg-white/5 hover:bg-white/12 text-slate-200 border border-white/5';
+      });
+    }
+
+    // Stop preset animation immediately when user grabs controls
+    controls.addEventListener('start', () => {
+      state.camAnimating = false;
+    });
+
+    function setBlueprintMode(enabled) {
+      state.blueprintMode = enabled;
+      for (const mesh of allHouseMeshes) {
+        if (enabled) {
+          const isGlass = mesh.userData.originalMaterial === mats.glass || mesh.userData.originalMaterial === mats.tealGlass;
+          mesh.material = isGlass ? mats.blueprintGlass : mats.blueprintSolid;
+        } else {
+          mesh.material = mesh.userData.originalMaterial;
+        }
+      }
+      for (const line of blueprintLines) {
+        line.visible = enabled;
+      }
+
+      if (enabled) {
+        scene.background.set('#071426');
+        scene.fog.color.set('#071426');
+        plinthMat.color.set('#081a33');
+        apronMat.color.set('#0a203d');
+        gridHelper.material.color.set('#38bdf8');
+        gridHelper.material.opacity = 0.35;
+      } else {
+        updateTimeOfDay(state.timeOfDay);
+        plinthMat.color.set('#e5e9ed');
+        apronMat.color.set('#d0d5db');
+        gridHelper.material.color.set('#9aa5b1');
+        gridHelper.material.opacity = 0.55;
+      }
+      rebuildLabels();
+    }
+
+    function updateTimeOfDay(hour) {
+      state.timeOfDay = hour;
+
+      // Format clock string & label
+      const hh = Math.floor(hour);
+      const mm = Math.round((hour - hh) * 60);
+      const clockStr = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      let phase = 'Daylight';
+      if (hour < 9.5) phase = 'Morning';
+      else if (hour < 16.5) phase = 'Daylight';
+      else if (hour < 19.3) phase = 'Golden Hour';
+      else phase = 'Night';
+      document.getElementById('time-label').textContent = `${phase} • ${clockStr}`;
+
+      // Sun arc across sky (6:00 East -> 13:00 High South -> 19:30 West)
+      const dayT = THREE.MathUtils.clamp((hour - 6.0) / 13.5, 0, 1);
+      const azimuth = THREE.MathUtils.lerp(-Math.PI * 0.45, Math.PI * 0.55, dayT);
+      const elevation = Math.sin(dayT * Math.PI) * 1.12; // max ~64 deg
+
+      const dist = 36;
+      if (hour <= 19.5) {
+        sunLight.position.set(
+          Math.sin(azimuth) * Math.cos(elevation) * dist,
+          Math.max(3, Math.sin(elevation) * dist),
+          Math.cos(azimuth) * Math.cos(elevation) * dist
+        );
+      } else {
+        // Moonlight position
+        sunLight.position.set(-18, 22, 16);
+      }
+
+      // Color & intensity keyframes
+      const skyColor = new THREE.Color();
+      const sunColor = new THREE.Color();
+      let sunInt = 1.9;
+      let hemiInt = 0.85;
+      let interiorInt = 0.0;
+
+      if (hour < 9.5) {
+        const t = (hour - 6.0) / 3.5;
+        skyColor.lerpColors(new THREE.Color('#c7d6e6'), new THREE.Color('#dce4ec'), t);
+        sunColor.lerpColors(new THREE.Color('#ffd099'), new THREE.Color('#fff8ed'), t);
+        sunInt = THREE.MathUtils.lerp(1.25, 1.9, t);
+        hemiInt = THREE.MathUtils.lerp(0.65, 0.85, t);
+        interiorInt = THREE.MathUtils.lerp(1.2, 0.0, t);
+      } else if (hour < 16.5) {
+        skyColor.set('#dce4ec');
+        sunColor.set('#fff8ed');
+        sunInt = 1.9;
+        hemiInt = 0.88;
+        interiorInt = 0.0;
+      } else if (hour < 19.3) {
+        const t = (hour - 16.5) / 2.8;
+        skyColor.lerpColors(new THREE.Color('#dce4ec'), new THREE.Color('#2c344d'), t);
+        sunColor.lerpColors(new THREE.Color('#ffaa5e'), new THREE.Color('#ff7043'), t);
+        sunInt = THREE.MathUtils.lerp(1.75, 0.55, t);
+        hemiInt = THREE.MathUtils.lerp(0.8, 0.35, t);
+        interiorInt = THREE.MathUtils.lerp(0.4, 3.8, t);
+      } else {
+        const t = THREE.MathUtils.clamp((hour - 19.3) / 2.2, 0, 1);
+        skyColor.lerpColors(new THREE.Color('#2c344d'), new THREE.Color('#0c1322'), t);
+        sunColor.set('#8db4e8');
+        sunInt = THREE.MathUtils.lerp(0.55, 0.38, t);
+        hemiInt = THREE.MathUtils.lerp(0.35, 0.22, t);
+        interiorInt = THREE.MathUtils.lerp(3.8, 5.2, t);
+      }
+
+      if (!state.blueprintMode) {
+        scene.background.copy(skyColor);
+        scene.fog.color.copy(skyColor);
+        const plinthBright = hour > 18.5 ? '#262f3d' : (hour > 17.0 ? '#9da6b0' : '#e5e9ed');
+        plinthMat.color.lerp(new THREE.Color(plinthBright), 0.85);
+        apronMat.color.lerp(new THREE.Color(hour > 18.5 ? '#1f2733' : '#d0d5db'), 0.85);
+      }
+
+      sunLight.color.copy(sunColor);
+      sunLight.intensity = sunInt;
+      hemiLight.intensity = hemiInt;
+
+      // Subtle warm glow on glass during evening/night + interior warm point lights
+      for (const pt of interiorLights) {
+        pt.intensity = interiorInt;
+      }
+      mats.glass.emissive = new THREE.Color('#ffaa55');
+      mats.glass.emissiveIntensity = interiorInt > 0.5 ? Math.min(0.24, interiorInt * 0.045) : 0;
+    }
+
+    // =========================================================================
+    // 10. PURE-JS .OBJ EXPORTER (Zero External Dependencies)
+    // =========================================================================
+
+    function showToast(msg) {
+      const box = document.getElementById('toast-box');
+      const txt = document.getElementById('toast-text');
+      txt.textContent = msg;
+      box.classList.remove('opacity-0', 'translate-y-[-20px]');
+      box.classList.add('opacity-100', 'translate-y-0');
+      clearTimeout(box._timer);
+      box._timer = setTimeout(() => {
+        box.classList.add('opacity-0', 'translate-y-[-20px]');
+        box.classList.remove('opacity-100', 'translate-y-0');
+      }, 3600);
+    }
+
+    function exportVisibleHouseToOBJ() {
+      try {
+        const lines = [
+          '# Modern Two-Story Blueprint House — 3D Architectural Model',
+          '# Scale: 1 unit = 1 meter | Y-Up | Exported from Interactive 3D Viewer',
+          ''
+        ];
+
+        let vertexOffset = 1;
+        let normalOffset = 1;
+        let totalVerts = 0;
+        let totalFaces = 0;
+
+        const v = new THREE.Vector3();
+        const n = new THREE.Vector3();
+        const normalMatrix = new THREE.Matrix3();
+
+        houseRoot.updateMatrixWorld(true);
+
+        const groupsToExport = [groundFloorGroup, firstFloorGroup, roofGroup];
+        for (const grp of groupsToExport) {
+          if (!grp.visible) continue;
+          grp.traverse(obj => {
+            if (!obj.isMesh || !obj.visible || obj.userData.isBlueprintHelper) return;
+            const geo = obj.geometry;
+            if (!geo || !geo.attributes.position) return;
+
+            const matName = (obj.userData.originalMaterial && obj.userData.originalMaterial.name) || 'DefaultMaterial';
+            lines.push(`o ${grp.name}_${obj.name || 'Mesh'}`);
+            lines.push(`usemtl ${matName}`);
+
+            const posAttr = geo.attributes.position;
+            const normAttr = geo.attributes.normal;
+            normalMatrix.getNormalMatrix(obj.matrixWorld);
+
+            for (let i = 0; i < posAttr.count; i++) {
+              v.fromBufferAttribute(posAttr, i).applyMatrix4(obj.matrixWorld);
+              lines.push(`v ${v.x.toFixed(4)} ${v.y.toFixed(4)} ${v.z.toFixed(4)}`);
+            }
+            totalVerts += posAttr.count;
+
+            if (normAttr) {
+              for (let i = 0; i < normAttr.count; i++) {
+                n.fromBufferAttribute(normAttr, i).applyMatrix3(normalMatrix).normalize();
+                lines.push(`vn ${n.x.toFixed(4)} ${n.y.toFixed(4)} ${n.z.toFixed(4)}`);
+              }
+            }
+
+            const index = geo.index;
+            if (index) {
+              for (let i = 0; i < index.count; i += 3) {
+                const a = index.getX(i) + vertexOffset;
+                const b = index.getX(i + 1) + vertexOffset;
+                const c = index.getX(i + 2) + vertexOffset;
+                if (normAttr) {
+                  const na = index.getX(i) + normalOffset;
+                  const nb = index.getX(i + 1) + normalOffset;
+                  const nc = index.getX(i + 2) + normalOffset;
+                  lines.push(`f ${a}//${na} ${b}//${nb} ${c}//${nc}`);
+                } else {
+                  lines.push(`f ${a} ${b} ${c}`);
+                }
+                totalFaces++;
+              }
+            } else {
+              for (let i = 0; i < posAttr.count; i += 3) {
+                const a = i + vertexOffset;
+                const b = i + 1 + vertexOffset;
+                const c = i + 2 + vertexOffset;
+                if (normAttr) {
+                  const na = i + normalOffset;
+                  const nb = i + 1 + normalOffset;
+                  const nc = i + 2 + normalOffset;
+                  lines.push(`f ${a}//${na} ${b}//${nb} ${c}//${nc}`);
+                } else {
+                  lines.push(`f ${a} ${b} ${c}`);
+                }
+                totalFaces++;
+              }
+            }
+
+            vertexOffset += posAttr.count;
+            if (normAttr) normalOffset += normAttr.count;
+          });
+        }
+
+        const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'modern-blueprint-house.obj';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+        showToast(`Exported modern-blueprint-house.obj (${totalVerts.toLocaleString()} verts, ${totalFaces.toLocaleString()} faces)`);
+      } catch (err) {
+        showToast('OBJ export failed — please try again.');
+        console.error(err);
+      }
+    }
+
+    // =========================================================================
+    // 11. UI EVENT BINDINGS
+    // =========================================================================
+
+    function setToggleUI(btnEl, isOn) {
+      btnEl.setAttribute('aria-pressed', String(isOn));
+      btnEl.classList.toggle('bg-[#4eb8bc]', isOn);
+      btnEl.classList.toggle('bg-slate-700', !isOn);
+      const knob = btnEl.querySelector('span');
+      knob.classList.toggle('translate-x-5', isOn);
+      knob.classList.toggle('translate-x-0', !isOn);
+    }
+
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
+    });
+
+    document.querySelectorAll('.cam-btn').forEach(btn => {
+      btn.addEventListener('click', () => setCameraPreset(btn.dataset.cam));
+    });
+
+    const btnLabels = document.getElementById('toggle-labels');
+    btnLabels.addEventListener('click', () => {
+      state.showLabels = !state.showLabels;
+      setToggleUI(btnLabels, state.showLabels);
+      rebuildLabels();
+    });
+
+    const btnBlueprint = document.getElementById('toggle-blueprint');
+    btnBlueprint.addEventListener('click', () => {
+      setBlueprintMode(!state.blueprintMode);
+      setToggleUI(btnBlueprint, state.blueprintMode);
+    });
+
+    const btnGrid = document.getElementById('toggle-grid');
+    btnGrid.addEventListener('click', () => {
+      state.showGrid = !state.showGrid;
+      gridHelper.visible = state.showGrid;
+      setToggleUI(btnGrid, state.showGrid);
+    });
+
+    const timeSlider = document.getElementById('time-slider');
+    timeSlider.addEventListener('input', e => {
+      updateTimeOfDay(parseFloat(e.target.value));
+    });
+
+    document.getElementById('btn-export-obj').addEventListener('click', exportVisibleHouseToOBJ);
+
+    // Collapsible HUD for small screens / unobstructed viewing
+    const hudPanel = document.getElementById('hud-panel');
+    const chevron = document.getElementById('icon-hud-chevron');
+    let hudOpen = window.innerWidth >= 640;
+    function applyHudCollapse() {
+      hudPanel.style.display = hudOpen ? 'flex' : 'none';
+      chevron.style.transform = hudOpen ? 'rotate(0deg)' : 'rotate(-90deg)';
+    }
+    applyHudCollapse();
+
+    document.getElementById('btn-toggle-hud').addEventListener('click', () => {
+      hudOpen = !hudOpen;
+      applyHudCollapse();
+    });
+
+    // Responsive Resize Handler
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // =========================================================================
+    // 12. ANIMATION LOOP (Started Cleanly After Window Load)
+    // =========================================================================
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      // Smoothly lerp exploded view floor elevations
+      firstFloorGroup.position.y += (state.targetFirstY - firstFloorGroup.position.y) * 0.1;
+      roofGroup.position.y += (state.targetRoofY - roofGroup.position.y) * 0.1;
+
+      // Smoothly lerp camera presets
+      if (state.camAnimating) {
+        camera.position.lerp(state.camTargetPos, 0.085);
+        controls.target.lerp(state.camTargetLook, 0.085);
+        if (camera.position.distanceTo(state.camTargetPos) < 0.05 && controls.target.distanceTo(state.camTargetLook) < 0.05) {
+          state.camAnimating = false;
+        }
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+      updateProjectedLabels();
+    }
+
+    function initApp() {
+      updateTimeOfDay(state.timeOfDay);
+      rebuildLabels();
+      animate();
+    }
+
+    if (document.readyState === 'complete') {
+      initApp();
+    } else {
+      window.addEventListener('load', initApp);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <title>3D Architectural Models — Interactive CAD Viewer Gallery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      color-scheme: light dark;
+
+      --bg-light: #f4f6f9;
+      --bg-dark: #090e1a;
+      --surface-light: #ffffff;
+      --surface-dark: #111827;
+      --surface-subtle-light: #eef2f7;
+      --surface-subtle-dark: #182235;
+      --border-light: rgba(15, 23, 42, 0.12);
+      --border-dark: rgba(248, 250, 252, 0.12);
+      --text-light: #0f172a;
+      --text-dark: #f8fafc;
+      --muted-light: #475569;
+      --muted-dark: #94a3b8;
+      --accent-warm-light: #b94e28;
+      --accent-warm-dark: #e6825a;
+      --accent-cool-light: #1e7f84;
+      --accent-cool-dark: #56c7cc;
+      --focus-light: #2563eb;
+      --focus-dark: #60a5fa;
+
+      --bg: var(--bg-light);
+      --surface: var(--surface-light);
+      --surface-subtle: var(--surface-subtle-light);
+      --border: var(--border-light);
+      --text: var(--text-light);
+      --muted: var(--muted-light);
+      --accent-warm: var(--accent-warm-light);
+      --accent-cool: var(--accent-cool-light);
+      --focus-ring: var(--focus-light);
+
+      @media (prefers-color-scheme: dark) {
+        --bg: var(--bg-dark);
+        --surface: var(--surface-dark);
+        --surface-subtle: var(--surface-subtle-dark);
+        --border: var(--border-dark);
+        --text: var(--text-dark);
+        --muted: var(--muted-dark);
+        --accent-warm: var(--accent-warm-dark);
+        --accent-cool: var(--accent-cool-dark);
+        --focus-ring: var(--focus-dark);
+      }
+
+      @supports (color: light-dark(white, black)) {
+        --bg: light-dark(var(--bg-light), var(--bg-dark));
+        --surface: light-dark(var(--surface-light), var(--surface-dark));
+        --surface-subtle: light-dark(var(--surface-subtle-light), var(--surface-subtle-dark));
+        --border: light-dark(var(--border-light), var(--border-dark));
+        --text: light-dark(var(--text-light), var(--text-dark));
+        --muted: light-dark(var(--muted-light), var(--muted-dark));
+        --accent-warm: light-dark(var(--accent-warm-light), var(--accent-warm-dark));
+        --accent-cool: light-dark(var(--accent-cool-light), var(--accent-cool-dark));
+        --focus-ring: light-dark(var(--focus-light), var(--focus-dark));
+      }
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .page-shell {
+      width: min(1120px, 100% - 2rem);
+      margin-inline: auto;
+      padding-block: clamp(2.5rem, 6vw, 4.5rem) 3rem;
+      flex: 1;
+    }
+
+    .hero {
+      max-width: 68ch;
+      margin-bottom: clamp(2rem, 4vw, 3rem);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      margin: 0 0 1rem;
+    }
+
+    .eyebrow-dot {
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      background: var(--accent-warm);
+    }
+
+    .hero h1 {
+      margin: 0 0 0.75rem;
+      font-size: clamp(1.85rem, 4vw, 2.75rem);
+      line-height: 1.15;
+      letter-spacing: -0.025em;
+    }
+
+    .hero p {
+      margin: 0;
+      font-size: 1rem;
+      color: var(--muted);
+    }
+
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      container-type: inline-size;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1.25rem;
+      overflow: hidden;
+      transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+
+    @supports (grid-template-rows: subgrid) {
+      .cards-grid {
+        grid-auto-rows: auto auto 1fr auto;
+      }
+      .card {
+        grid-row: span 4;
+        grid-template-rows: subgrid;
+      }
+    }
+
+    .card:has(a.card-link) {
+      position: relative;
+    }
+
+    .card a.card-link {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .card a.card-link::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+    }
+
+    .card a.card-link:focus-visible {
+      outline: none;
+    }
+
+    .card:has(a.card-link:focus-visible) {
+      outline: 3px solid var(--focus-ring);
+      outline-offset: 3px;
+    }
+
+    .card:has(a.card-link:hover) {
+      transform: translateY(-4px);
+      border-color: var(--accent-warm);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.16);
+    }
+
+    .card--cool:has(a.card-link:hover) {
+      border-color: var(--accent-cool);
+    }
+
+    .card > svg {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      background: var(--surface-subtle);
+    }
+
+    .card > header {
+      padding: 1.25rem 1.5rem 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .card-badge {
+      align-self: flex-start;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.22rem 0.6rem;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--accent-warm) 14%, transparent);
+      color: var(--accent-warm);
+    }
+
+    .card--cool .card-badge {
+      background: color-mix(in srgb, var(--accent-cool) 15%, transparent);
+      color: var(--accent-cool);
+    }
+
+    .card h2 {
+      margin: 0;
+      font-size: 1.3rem;
+      line-height: 1.25;
+      letter-spacing: -0.015em;
+    }
+
+    .card > .card-details {
+      padding: 0 1.5rem 1rem;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .card > .card-details p {
+      margin: 0 0 1rem;
+    }
+
+    .spec-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+
+    .spec-list li {
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 0.28rem 0.65rem;
+      border-radius: 0.5rem;
+      background: var(--surface-subtle);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .card > footer {
+      padding: 1rem 1.5rem 1.35rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--accent-warm);
+    }
+
+    .card--cool > footer {
+      color: var(--accent-cool);
+    }
+
+    .cta-arrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: transform 180ms ease;
+    }
+
+    .card:has(a.card-link:hover) .cta-arrow {
+      transform: translateX(4px);
+    }
+
+    .folder-tag {
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--muted);
+    }
+
+    @container (min-width: 560px) {
+      .card:has(> svg) {
+        grid-template-columns: minmax(220px, 42%) 1fr;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      .card:has(> svg) > svg {
+        grid-column: 1;
+        grid-row: 1 / -1;
+        height: 100%;
+        aspect-ratio: auto;
+      }
+
+      .card:has(> svg) > header,
+      .card:has(> svg) > .card-details,
+      .card:has(> svg) > footer {
+        grid-column: 2;
+      }
+    }
+
+    .page-footer {
+      width: min(1120px, 100% - 2rem);
+      margin-inline: auto;
+      padding: 1.5rem 0 2.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .card,
+      .cta-arrow {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page-shell">
+    <section class="hero">
+      <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>Interactive Three.js Architectural Showcase</p>
+      <h1>3D Architectural House Models</h1>
+      <p>
+        Explore full-screen interactive 3D architectural residences directly in your browser with floor cutaways,
+        exploded views, room labels, dynamic time-of-day lighting, wireframe blueprints, and <code>.OBJ</code> export.
+      </p>
+    </section>
+
+    <section class="cards-grid" aria-label="Available 3D models">
+      <article class="card">
+        <svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="satya-sky" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#1e293b" />
+              <stop offset="55%" stop-color="#334155" />
+              <stop offset="100%" stop-color="#7c3e27" />
+            </linearGradient>
+            <linearGradient id="satya-accent" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#d97742" />
+              <stop offset="100%" stop-color="#f2b366" />
+            </linearGradient>
+          </defs>
+          <rect width="640" height="360" fill="url(#satya-sky)" />
+          <g stroke="rgba(255,255,255,0.1)" stroke-width="1">
+            <path d="M0 290 L640 290 M0 245 L640 245 M120 0 L120 360 M280 0 L280 360 M440 0 L440 360" />
+          </g>
+          <polygon points="150,275 320,210 495,260 325,325" fill="rgba(15,23,42,0.45)" />
+          <polygon points="190,260 320,215 320,100 190,145" fill="#e8dcc8" />
+          <polygon points="320,215 455,252 455,137 320,100" fill="#c7b59b" />
+          <polygon points="190,145 320,100 455,137 325,182" fill="#f5ede0" />
+          <polygon points="225,138 320,105 320,62 225,95" fill="url(#satya-accent)" />
+          <polygon points="320,105 420,132 420,89 320,62" fill="#a84926" />
+          <polygon points="225,95 320,62 420,89 325,122" fill="#f7b294" />
+          <g fill="#0f172a" opacity="0.72">
+            <polygon points="212,235 256,220 256,184 212,199" />
+            <polygon points="270,215 305,203 305,167 270,179" />
+            <polygon points="342,202 396,217 396,178 342,163" />
+            <polygon points="408,220 442,230 442,191 408,181" />
+          </g>
+        </svg>
+
+        <header>
+          <span class="card-badge">Satya • G+2 Residence</span>
+          <h2>
+            <a class="card-link" href="./Satya/modern_g_2_residence_3d_model_viewer.html">
+              Modern G+2 Residence (41'-6" × 51'-6")
+            </a>
+          </h2>
+        </header>
+
+        <div class="card-details">
+          <p>
+            Multi-level G+2 residential model built at 1 unit = 1 ft scale with full exterior, 2nd/1st/ground floor
+            cutaways, 4-level exploded view, surroundings toggle, and 5 camera presets.
+          </p>
+          <ul class="spec-list">
+            <li>41'-6" × 51'-6"</li>
+            <li>4-Level Exploded View</li>
+            <li>ft-in Room Labels</li>
+            <li>OBJ Export</li>
+          </ul>
+        </div>
+
+        <footer>
+          <span class="folder-tag">Satya</span>
+          <span class="cta-arrow">Launch 3D Viewer <span aria-hidden="true">→</span></span>
+        </footer>
+      </article>
+
+      <article class="card card--cool">
+        <svg viewBox="0 0 640 360" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="shiva-sky" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#0f172a" />
+              <stop offset="55%" stop-color="#1e293b" />
+              <stop offset="100%" stop-color="#164e63" />
+            </linearGradient>
+            <linearGradient id="shiva-accent" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#4eb8bc" />
+              <stop offset="100%" stop-color="#8de0e3" />
+            </linearGradient>
+          </defs>
+          <rect width="640" height="360" fill="url(#shiva-sky)" />
+          <g stroke="rgba(78,184,188,0.16)" stroke-width="1">
+            <path d="M0 285 L640 285 M0 235 L640 235 M140 0 L140 360 M320 0 L320 360 M500 0 L500 360" />
+          </g>
+          <polygon points="150,275 320,215 495,265 325,325" fill="rgba(2,6,23,0.45)" />
+          <polygon points="180,255 320,208 320,126 180,173" fill="#e2e8f0" />
+          <polygon points="320,208 465,248 465,166 320,126" fill="#94a3b8" />
+          <polygon points="180,173 320,126 465,166 325,213" fill="#cbd5e1" />
+          <polygon points="215,152 325,116 325,78 215,114" fill="#c94854" />
+          <polygon points="325,116 445,149 445,111 325,78" fill="#9f2f3b" />
+          <polygon points="215,114 325,78 445,111 335,147" fill="url(#shiva-accent)" />
+          <g fill="#0f172a" opacity="0.78">
+            <polygon points="205,232 252,216 252,184 205,200" />
+            <polygon points="268,211 305,199 305,167 268,179" />
+            <polygon points="342,198 402,215 402,179 342,162" />
+            <polygon points="414,218 448,228 448,192 414,182" />
+          </g>
+        </svg>
+
+        <header>
+          <span class="card-badge">Shiva • 2-Story Blueprint</span>
+          <h2>
+            <a class="card-link" href="./Shiva/3d_architectural_house_model_viewer.html">
+              Modern Blueprint Residence (2-Story CAD)
+            </a>
+          </h2>
+        </header>
+
+        <div class="card-details">
+          <p>
+            Two-story architectural blueprint house built at 1 unit = 1m scale featuring exterior, 1st floor and ground
+            cutaways, exploded view, blueprint wireframe, and architectural grid.
+          </p>
+          <ul class="spec-list">
+            <li>2-Story CAD</li>
+            <li>1 unit = 1m</li>
+            <li>Blueprint Wireframe</li>
+            <li>OBJ Export</li>
+          </ul>
+        </div>
+
+        <footer>
+          <span class="folder-tag">Shiva</span>
+          <span class="cta-arrow">Launch 3D Viewer <span aria-hidden="true">→</span></span>
+        </footer>
+      </article>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <span>Controls inside viewers: Left-drag to orbit • Right-drag to pan • Scroll / Pinch to zoom</span>
+    <span>Hosted on GitHub Pages</span>
+  </footer>
+</body>
+</html>
